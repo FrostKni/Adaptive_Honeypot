@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Honeypot Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        h1 { color: #38bdf8; font-size: 2em; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .stat-card { background: #1e293b; padding: 20px; border-radius: 10px; border-left: 4px solid #38bdf8; }
+        .stat-value { font-size: 2.5em; font-weight: bold; color: #38bdf8; }
+        .stat-label { color: #94a3b8; margin-top: 5px; }
+        .section { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .section-title { font-size: 1.5em; margin-bottom: 15px; color: #38bdf8; }
+        .honeypot-list { display: grid; gap: 15px; }
+        .honeypot-item { background: #334155; padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .honeypot-info { flex: 1; }
+        .honeypot-name { font-weight: bold; font-size: 1.1em; }
+        .honeypot-status { display: inline-block; padding: 5px 10px; border-radius: 5px; font-size: 0.9em; margin-top: 5px; }
+        .status-running { background: #10b981; color: white; }
+        .status-stopped { background: #ef4444; color: white; }
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em; transition: 0.3s; }
+        .btn-primary { background: #38bdf8; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn:hover { opacity: 0.8; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        input { padding: 10px; border-radius: 5px; border: 1px solid #475569; background: #334155; color: white; }
+        .log-entry { background: #334155; padding: 10px; margin-bottom: 5px; border-radius: 5px; font-family: monospace; font-size: 0.9em; }
+        .severity-high { border-left: 4px solid #ef4444; }
+        .severity-medium { border-left: 4px solid #f59e0b; }
+        .severity-low { border-left: 4px solid #10b981; }
+        .connection-status { position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 5px; font-weight: bold; }
+        .connected { background: #10b981; }
+        .disconnected { background: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">Connecting...</div>
+    
+    <div class="container">
+        <header>
+            <h1>🍯 Adaptive Honeypot Dashboard</h1>
+            <p>Real-time monitoring and control</p>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="activeHoneypots">0</div>
+                <div class="stat-label">Active Honeypots</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalAdaptations">0</div>
+                <div class="stat-label">Total Adaptations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalAttacks">0</div>
+                <div class="stat-label">Total Attacks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="uniqueIPs">0</div>
+                <div class="stat-label">Unique IPs</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Deploy New Honeypot</div>
+            <div class="controls">
+                <input type="text" id="honeypotName" placeholder="Honeypot Name" value="ssh-honeypot">
+                <input type="number" id="honeypotPort" placeholder="Port" value="2222">
+                <button class="btn btn-primary" onclick="deployHoneypot()">Deploy</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Active Honeypots</div>
+            <div class="honeypot-list" id="honeypotList">
+                <p style="color: #94a3b8;">No active honeypots</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Recent Attack Events</div>
+            <div id="attackLogs">
+                <p style="color: #94a3b8;">No recent attacks</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let ws = null;
+
+        // WebSocket connection
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8000/ws');
+            
+            ws.onopen = () => {
+                document.getElementById('connectionStatus').textContent = 'Connected';
+                document.getElementById('connectionStatus').className = 'connection-status connected';
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'status_update') {
+                    updateDashboard(data.data);
+                }
+            };
+            
+            ws.onclose = () => {
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                document.getElementById('connectionStatus').className = 'connection-status disconnected';
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        // Deploy honeypot
+        async function deployHoneypot() {
+            const name = document.getElementById('honeypotName').value;
+            const port = document.getElementById('honeypotPort').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/honeypots/deploy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, port: parseInt(port) })
+                });
+                
+                if (response.ok) {
+                    alert('Honeypot deployed successfully!');
+                    loadHoneypots();
+                }
+            } catch (error) {
+                alert('Deployment failed: ' + error.message);
+            }
+        }
+
+        // Remove honeypot
+        async function removeHoneypot(id) {
+            if (!confirm('Are you sure you want to remove this honeypot?')) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/honeypots/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    loadHoneypots();
+                }
+            } catch (error) {
+                alert('Removal failed: ' + error.message);
+            }
+        }
+
+        // Load honeypots
+        async function loadHoneypots() {
+            try {
+                const response = await fetch(`${API_URL}/honeypots`);
+                const honeypots = await response.json();
+                
+                const listEl = document.getElementById('honeypotList');
+                
+                if (honeypots.length === 0) {
+                    listEl.innerHTML = '<p style="color: #94a3b8;">No active honeypots</p>';
+                    return;
+                }
+                
+                listEl.innerHTML = honeypots.map(hp => `
+                    <div class="honeypot-item">
+                        <div class="honeypot-info">
+                            <div class="honeypot-name">${hp.id}</div>
+                            <span class="honeypot-status status-${hp.status}">${hp.status}</span>
+                            <span style="color: #94a3b8; margin-left: 10px;">Type: ${hp.type}</span>
+                        </div>
+                        <button class="btn btn-danger" onclick="removeHoneypot('${hp.id}')">Remove</button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load honeypots:', error);
+            }
+        }
+
+        // Update dashboard
+        function updateDashboard(data) {
+            document.getElementById('activeHoneypots').textContent = data.active_honeypots;
+            document.getElementById('totalAdaptations').textContent = data.total_adaptations;
+        }
+
+        // Load recent events
+        async function loadRecentEvents() {
+            try {
+                const response = await fetch(`${API_URL}/events/recent?limit=20`);
+                const events = await response.json();
+                
+                const logsEl = document.getElementById('attackLogs');
+                
+                if (events.length === 0) {
+                    logsEl.innerHTML = '<p style="color: #94a3b8;">No recent attacks</p>';
+                    return;
+                }
+                
+                logsEl.innerHTML = events.map(event => {
+                    const time = new Date(event.timestamp).toLocaleString();
+                    const severity = event.severity || 'low';
+                    const type = event.attack_type || 'unknown';
+                    const ip = event.source_ip || 'unknown';
+                    const commands = event.commands?.join(', ') || 'N/A';
+                    const username = event.username || 'N/A';
+                    
+                    return `
+                        <div class="log-entry severity-${severity}">
+                            <strong>${time}</strong> | ${ip} | ${type}<br>
+                            User: ${username} | Commands: ${commands}
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load events:', error);
+            }
+        }
+
+        // Initialize
+        connectWebSocket();
+        loadHoneypots();
+        loadRecentEvents();
+        setInterval(loadHoneypots, 10000);
+        setInterval(loadRecentEvents, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+##Problem Statement:
+
+To design a fully autonomous, containerized adaptive honeynet capable of dynamically modifying its environment, escalating interaction based on attacker actions, and preserving active sessions to maximize engagement and intelligence value.
+
+
+
+##Scope of Work:
+The design, implementation, and evaluation of an autonomous adaptive
+honeynet using Docker containers and AI-driven orchestration. The major tasks include:
+
+1. Designing modular honeypot templates (SSH/Cowrie).
+2. Building an automated engine for deploying, reconfiguring, and migrating honeypots based on attacker behaviour.
+3. Developing a log-processing pipeline with anonymization and artefact extraction.
+4. Using LLMs and rule-based reasoning to classify attacker actions and recommend
+interaction-level escalation.
+5. Creating a dynamic configuration generator for the new docker containers.
+6. Implementing session-preserving migration between low- and high-interaction honeypots.
+7. Designing a dashboard for orchestration and behaviour visualization.
+8. Benchmarking system performance, deception effectiveness, and attacker engagement.
+This scope ensures the system is practically deployable and supports defence-oriented cyber operations.
+
+
+Automated monitoring of container health, resource usage, and
+activity enables restarting, replacing, or tuning honeypot components.
+
+Quantitative evaluation: The system is benchmarked for deception effectiveness,
+engagement duration, behavioural diversity, and configuration accuracy against static
+honeypots.
+
+
+##Modules and sub modules:
+
+0. Core Module: Adaptive Honeypot
+
+0.1 Deployment Module
+0.1.2 Container Health Checker
+
+0.2 Configuration Engine
+0.2.1 Schema Validator
+0.2.2 Generator
+
+0.3 Service Emulator
+0.4 Monitoring and Logging
+
+0.5 Adaptive Trigger Engine
+0.5.1 Configuration Rollback Engine
+0.5.2 Deception Engine
+
+0.6 Web Dashboard Module
+
+0.7 Utility
+0.7.1 Time-Series Helper
+0.7.2 Resource Monitor
+
+
+
+
+## Project Feature Matrix
+
+\label{tab:feature_matrix}
+% Use tabularx with \textwidth to ensure the table spans the page width
+\begin{tabularx}{\textwidth}{|l|Y|Y|c|Y|}
+\hline
+\textbf{Characteristic} &\textbf{Logic} 
+\hline
+\textbf{Deployment Module} & Receives config, builds containers, handles auto-stop, ensures live
+\hline
+\textbf{Container Health Checker} & Checks container running, validates probes, shows banner, sends PAll.
+\hline
+\textbf{Configuration Engine}  & Reads logs, identifies patterns, generates/uploads/validates, defaults.
+\hline
+\textbf{Schema Validator} & Validates fields/types, allows fields, enforces rules, defaults.
+\hline
+\textbf{Configuration Generator} & Uses AI to read commands, adjusts/devices, outputs config.
+\hline
+\textbf{Service Emulation} & Starts/stops services, applies profiles, handles health.
+\hline
+\textbf{Monitoring and Logging} & Collects logs, converts to structured format, triggers events, stores.
+\hline
+\textbf{Adaptive Trigger Engine} & Evaluates attack frequency, error parameters, honeypot failures, decides.
+\hline
+\textbf{Configuration Rollback} & Keeps version history, reverts to last good/default config.
+\hline
+\textbf{Deception Engine} & Deception strategies, skill estimation, AI usage. \\
+\hline
+\textbf{Web Dashboard} & Shows container health, logs, performance, provides controls.
+\hline
+\textbf{Time-Series Helper} & Analyzes attack frequency, detects specific trends, alerts.
+\hline
+\textbf{Resource Monitor} & Monitors CPU, RAM, disk, triggers orchestrator for rollback
+\hline
+\end{tabularx}

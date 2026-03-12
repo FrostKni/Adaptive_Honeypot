@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.orchestrator
+    container_name: adaptive_orchestrator
+    ports:
+      - "8000:8000"
+      - "9090:9090"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/app/logs
+      - ./honeypots:/app/honeypots
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - honeypot_net
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: honeypot_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - honeypot_net
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: honeypot_dashboard
+    ports:
+      - "3000:80"
+    depends_on:
+      - orchestrator
+    networks:
+      - honeypot_net
+    restart: unless-stopped
+
+networks:
+  honeypot_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  logs:
+  honeypots:
