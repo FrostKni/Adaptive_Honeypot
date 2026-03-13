@@ -1,0 +1,374 @@
+# Alertmanager Rules for Adaptive Honeypot System
+# This file contains both alert rules and alertmanager configuration
+
+# ========================================
+# Alert Rules (for Prometheus)
+# ========================================
+groups:
+  # ========================================
+  # Honeypot Application Alerts
+  # ========================================
+  - name: honeypot-application.rules
+    rules:
+      # High attack rate alert
+      - alert: HighAttackRate
+        expr: |
+          sum(rate(honeypot_attacks_total[5m])) > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High attack rate detected"
+          description: "Attack rate is {{ $value | printf \"%.2f\" }} attacks/sec, which is above the threshold of 100"
+          runbook_url: "https://runbooks.example.com/honeypot/high-attack-rate"
+
+      # Critical attack rate alert
+      - alert: CriticalAttackRate
+        expr: |
+          sum(rate(honeypot_attacks_total[5m])) > 500
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Critical attack rate detected"
+          description: "Attack rate is {{ $value | printf \"%.2f\" }} attacks/sec, indicating a potential DDoS or coordinated attack"
+          runbook_url: "https://runbooks.example.com/honeypot/critical-attack-rate"
+
+      # No active honeypots
+      - alert: NoActiveHoneypots
+        expr: |
+          sum(honeypot_containers_active) == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "No active honeypots"
+          description: "All honeypot containers are down. The system is not capturing attack data."
+
+      # Honeypot container restart loop
+      - alert: HoneypotRestartLoop
+        expr: |
+          increase(honeypot_container_restarts_total[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "Honeypot containers are restarting frequently"
+          description: "{{ $value }} honeypot container restarts in the last 10 minutes"
+
+      # High adaptation rate
+      - alert: HighAdaptationRate
+        expr: |
+          sum(rate(honeypot_adaptations_total[10m])) > 10
+        for: 10m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High honeypot adaptation rate"
+          description: "The system is adapting at an unusually high rate ({{ $value | printf \"%.2f\" }}/sec). This may indicate sophisticated attackers."
+
+      # Failed threat analysis
+      - alert: HighThreatAnalysisFailure
+        expr: |
+          sum(rate(honeypot_threat_analysis_failures_total[5m])) / sum(rate(honeypot_threat_analysis_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "High threat analysis failure rate"
+          description: "{{ $value | humanizePercentage }} of threat analyses are failing"
+
+  # ========================================
+  # Backend Service Alerts
+  # ========================================
+  - name: honeypot-backend.rules
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "High HTTP error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}, which is above 5% threshold"
+
+      # Critical error rate
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.15
+        for: 2m
+        labels:
+          severity: critical
+          category: reliability
+        annotations:
+          summary: "Critical HTTP error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}, which is above 15% threshold"
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High request latency"
+          description: "95th percentile latency is {{ $value | humanizeDuration }}"
+
+      # Critical latency
+      - alert: CriticalLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 5
+        for: 5m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical request latency"
+          description: "95th percentile latency is {{ $value | humanizeDuration }}, requests are timing out"
+
+      # Instance down
+      - alert: BackendDown
+        expr: |
+          up{job="honeypot-backend"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Backend instance is down"
+          description: "Backend instance {{ $labels.instance }} has been down for more than 5 minutes"
+
+      # Memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      # CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | printf \"%.1f\" }}%"
+
+  # ========================================
+  # Database Alerts
+  # ========================================
+  - name: honeypot-database.rules
+    rules:
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: |
+          pg_up == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL instance {{ $labels.instance }} is not responding"
+
+      # PostgreSQL connections running out
+      - alert: PostgreSQLTooManyConnections
+        expr: |
+          pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "PostgreSQL connection pool nearly exhausted"
+          description: "{{ $value | humanizePercentage }} of PostgreSQL connections are in use"
+
+      # PostgreSQL replication lag
+      - alert: PostgreSQLReplicationLag
+        expr: |
+          pg_replication_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "PostgreSQL replication lag"
+          description: "Replication lag is {{ $value | humanizeDuration }}"
+
+      # PostgreSQL slow queries
+      - alert: PostgreSQLSlowQueries
+        expr: |
+          rate(pg_stat_statements_mean_exec_time_seconds[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "Average query execution time is {{ $value | humanizeDuration }}"
+
+  # ========================================
+  # Redis Alerts
+  # ========================================
+  - name: honeypot-redis.rules
+    rules:
+      # Redis down
+      - alert: RedisDown
+        expr: |
+          redis_up == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance {{ $labels.instance }} is not responding"
+
+      # Redis memory
+      - alert: RedisMemoryUsage
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Redis memory nearly exhausted"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+      # Redis connections
+      - alert: RedisTooManyConnections
+        expr: |
+          redis_connected_clients / redis_config_maxclients > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "Redis connection pool nearly exhausted"
+          description: "{{ $value | humanizePercentage }} of Redis connections are in use"
+
+  # ========================================
+  # Kubernetes Alerts
+  # ========================================
+  - name: honeypot-kubernetes.rules
+    rules:
+      # Pod crash loop
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "Pod is crash looping"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is restarting frequently"
+
+      # Pod not ready
+      - alert: PodNotReady
+        expr: |
+          kube_pod_status_phase{phase=~"Pending|Unknown"} > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "Pod is not ready"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in {{ $labels.phase }} state for more than 15 minutes"
+
+      # HPA scale limit
+      - alert: HPAScaleLimit
+        expr: |
+          kube_hpa_status_current_replicas == kube_hpa_spec_max_replicas
+        for: 30m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "HPA reached maximum replicas"
+          description: "HPA {{ $labels.namespace }}/{{ $labels.hpa }} has reached its maximum replica count"
+
+      # Persistent volume usage
+      - alert: PersistentVolumeUsageCritical
+        expr: |
+          kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9
+        for: 10m
+        labels:
+          severity: critical
+          category: resources
+        annotations:
+          summary: "Persistent volume nearly full"
+          description: "Persistent volume {{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+
+  # ========================================
+  # Security Alerts
+  # ========================================
+  - name: honeypot-security.rules
+    rules:
+      # Suspicious IP patterns
+      - alert: SuspiciousIPPattern
+        expr: |
+          sum by (source_ip) (rate(honeypot_attacks_total[1h])) > 50
+        for: 15m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Suspicious IP activity detected"
+          description: "IP {{ $labels.source_ip }} has generated high attack activity"
+
+      # Multiple honeypot targeting
+      - alert: MultipleHoneypotTargeting
+        expr: |
+          count by (source_ip) (honeypot_sessions_active) > 3
+        for: 30m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "IP targeting multiple honeypots"
+          description: "IP {{ $labels.source_ip }} is connected to multiple honeypots simultaneously"
+
+      # Credential stuffing detected
+      - alert: CredentialStuffingDetected
+        expr: |
+          sum(rate(honeypot_auth_attempts_total{success="false"}[5m])) > 20
+        for: 10m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Possible credential stuffing attack"
+          description: "High rate of failed authentication attempts detected"
+
+      # New attack pattern
+      - alert: NewAttackPattern
+        expr: |
+          increase(honeypot_unique_attack_patterns_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: info
+          category: security
+        annotations:
+          summary: "New attack patterns detected"
+          description: "{{ $value }} new attack patterns have been identified in the last hour"

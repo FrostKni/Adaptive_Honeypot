@@ -1,57 +1,96 @@
-version: '3.8'
+# Local Development Docker Compose
+# Usage: docker-compose up -d
+
+version: "3.9"
 
 services:
-  orchestrator:
+  # ==================== Backend API ====================
+  backend:
     build:
       context: .
-      dockerfile: docker/Dockerfile.orchestrator
-    container_name: adaptive_orchestrator
+      dockerfile: deploy/docker/Dockerfile.backend
+    container_name: honeypot-backend
     ports:
       - "8000:8000"
-      - "9090:9090"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./logs:/app/logs
-      - ./honeypots:/app/honeypots
-    env_file:
-      - .env
     environment:
-      - PYTHONUNBUFFERED=1
+      - DB_URL=sqlite:///./data/honeypot.db
+      - JWT_SECRET=dev-secret-change-in-production
+      - ENVIRONMENT=development
+      - DEBUG=true
+    volumes:
+      - ./:/app
+      - honeypot-data:/app/data
     networks:
-      - honeypot_net
-    restart: unless-stopped
-    depends_on:
-      - redis
+      - honeypot-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: honeypot_redis
-    ports:
-      - "6379:6379"
-    networks:
-      - honeypot_net
-    restart: unless-stopped
-
-  dashboard:
+  # ==================== Frontend ====================
+  frontend:
     build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    container_name: honeypot_dashboard
+      context: ./frontend
+      dockerfile: ../deploy/docker/Dockerfile.frontend
+    container_name: honeypot-frontend
     ports:
-      - "3000:80"
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
     depends_on:
-      - orchestrator
+      - backend
     networks:
-      - honeypot_net
+      - honeypot-network
+
+  # ==================== SSH Honeypot (Cowrie) ====================
+  cowrie-ssh:
+    image: cowrie/cowrie:latest
+    container_name: honeypot-cowrie-ssh
+    ports:
+      - "2222:2222"   # SSH
+      - "2323:2323"   # Telnet
+    volumes:
+      - cowrie-data:/cowrie/data
+      - cowrie-log:/cowrie/var/log/cowrie
+      - cowrie-dl:/cowrie/dl
+    networks:
+      - honeypot-network
+    restart: unless-stopped
+
+  # ==================== FTP Honeypot ====================
+  ftp-honeypot:
+    image: stilliard/pure-ftpd:latest
+    container_name: honeypot-ftp
+    ports:
+      - "2121:21"
+      - "30000-30009:30000-30009"
+    environment:
+      - PUBLICHOST=0.0.0.0
+      - ADDED_FLAGS=--createhomedir --keepallfiles
+    volumes:
+      - ftp-data:/home/ftpusers
+      - ftp-log:/var/log/pure-ftpd
+    networks:
+      - honeypot-network
+    restart: unless-stopped
+
+  # ==================== HTTP Honeypot ====================
+  http-honeypot:
+    image: nginx:alpine
+    container_name: honeypot-http
+    ports:
+      - "8080:80"
+    volumes:
+      - http-log:/var/log/nginx
+    networks:
+      - honeypot-network
     restart: unless-stopped
 
 networks:
-  honeypot_net:
+  honeypot-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.25.0.0/16
 
 volumes:
-  logs:
-  honeypots:
+  honeypot-data:
+  cowrie-data:
+  cowrie-log:
+  cowrie-dl:
+  ftp-data:
+  ftp-log:
+  http-log:

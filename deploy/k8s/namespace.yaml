@@ -1,0 +1,13 @@
+# Kubernetes Namespace for Adaptive Honeypot System
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: honeypot
+  labels:
+    name: honeypot
+    app.kubernetes.io/name: adaptive-honeypot
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    scheduler.alpha.kubernetes.io/defaultTolerations: '[]'
+    scheduler.alpha.kubernetes.io/tolerationsWhitelist: '[]'
