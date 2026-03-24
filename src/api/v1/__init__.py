@@ -15,6 +15,7 @@ from src.api.v1.endpoints import (
     admin,
     settings,
     ai_monitoring,
+    cognitive,
 )
 
 router = APIRouter()
@@ -31,5 +32,6 @@ router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
 router.include_router(admin.router, prefix="/admin", tags=["Admin"])
 router.include_router(settings.router, prefix="/settings", tags=["Settings"])
 router.include_router(ai_monitoring.router, prefix="/ai", tags=["AI Monitoring"])
+router.include_router(cognitive.router, prefix="/cognitive", tags=["Cognitive Deception"])
 
 # Note: WebSocket endpoint is registered directly on the app in app.py

@@ -126,3 +126,80 @@ export interface AttackMapProps {
   onLocationClick?: (location: AttackLocation) => void
   refreshInterval?: number
 }
+
+// Cognitive Security Types
+export interface DetectedBias {
+  bias_type: string
+  confidence: number
+  signals_matched: string[]
+  signal_scores: Record<string, number>
+}
+
+export interface MentalModel {
+  beliefs: Record<string, { confidence: number; evidence: string[] }>
+  knowledge: string[]
+  goals: string[]
+  expectations: Record<string, number>
+  confidence: number
+}
+
+export interface CognitiveMetrics {
+  overconfidence_score: number
+  persistence_score: number
+  tunnel_vision_score: number
+  curiosity_score: number
+  exploitation_potential: number
+  adaptability_score: number
+}
+
+export interface DeceptionMetrics {
+  total_applied: number
+  successful: number
+  success_rate: number
+  suspicion_level: number
+  by_strategy: Record<string, { applied: number; successful: number }>
+}
+
+export interface CognitiveSession {
+  session_id: string
+  source_ip: string
+  started_at: string
+  last_activity: string
+  biases: DetectedBias[]
+  mental_model: MentalModel
+  cognitive_metrics: CognitiveMetrics
+  deception_metrics: DeceptionMetrics
+  commands: CommandEntry[]
+  active: boolean
+}
+
+export interface CommandEntry {
+  timestamp: string
+  command: string
+  deception_strategy?: string
+  response_indicators: string[]
+  suspicion_change: number
+}
+
+export type BiasType = 
+  | 'confirmation_bias'
+  | 'sunk_cost'
+  | 'dunning_kruger'
+  | 'anchoring'
+  | 'curiosity_gap'
+  | 'loss_aversion'
+  | 'availability_heuristic'
+  | 'gambler_fallacy'
+
+export type DeceptionStrategy = 
+  | 'confirm_expected_files'
+  | 'confirm_vulnerability'
+  | 'reward_persistence'
+  | 'near_miss_hint'
+  | 'false_confidence'
+  | 'partial_success_feedback'
+  | 'weak_first_impression'
+  | 'tease_hidden_value'
+  | 'breadcrumb_trail'
+  | 'create_fomo'
+  | 'easy_path_visibility'

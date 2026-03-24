@@ -1,0 +1,338 @@
+{
+  "Core gaps": {
+    "query": "honeypot research gaps limitations unsolved problems",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "The GAPS Project: First Results",
+        "summary": "The GAPS programme is an Italian project aiming to search and characterize extra-solar planetary systems around stars with different characteristics (mass, metallicity, environment). GAPS was born in 2012, when single research groups joined in order to propose a long-term multi-purpose observing pro",
+        "url": "http://arxiv.org/abs/1708.04166v1"
+      },
+      {
+        "title": "Critically rotating stars in binaries - an unsolved problem -",
+        "summary": "In close binaries mass and angular momentum can be transferred from one star to the other during Roche-lobe overflow. The efficiency of this process is not well understood and constitutes one of the largest uncertainties in binary evolution.\n  One of the problems lies in the transfer of angular mome",
+        "url": "http://arxiv.org/abs/0709.2285v1"
+      },
+      {
+        "title": "HoneyDOC: An Efficient Honeypot Architecture Enabling All-Round Design",
+        "summary": "Honeypots are designed to trap the attacker with the purpose of investigating its malicious behavior. Owing to the increasing variety and sophistication of cyber attacks, how to capture high-quality attack data has become a challenge in the context of honeypot area. All-round honeypots, which mean s",
+        "url": "http://arxiv.org/abs/2402.06516v1"
+      }
+    ]
+  },
+  "Adaptive challenges": {
+    "query": "adaptive honeypot challenges future directions",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Report from the NSF Future Directions Workshop, Toward User-Oriented Agents: Research Directions and Challenges",
+        "summary": "This USER Workshop was convened with the goal of defining future research directions for the burgeoning intelligent agent research community and to communicate them to the National Science Foundation. It took place in Pittsburgh Pennsylvania on October 24 and 25, 2019 and was sponsored by National S",
+        "url": "http://arxiv.org/abs/2006.06026v1"
+      },
+      {
+        "title": "HoneyDOC: An Efficient Honeypot Architecture Enabling All-Round Design",
+        "summary": "Honeypots are designed to trap the attacker with the purpose of investigating its malicious behavior. Owing to the increasing variety and sophistication of cyber attacks, how to capture high-quality attack data has become a challenge in the context of honeypot area. All-round honeypots, which mean s",
+        "url": "http://arxiv.org/abs/2402.06516v1"
+      },
+      {
+        "title": "Closing the Performance and Management Gaps with Satellite Internet: Challenges, Approaches, and Future Directions",
+        "summary": "Recent advancements in low-Earth orbit (LEO) satellites represented by large constellations and advanced payloads provide great promises for enabling beyond 5G and 6G telecommunications and high-quality and ubiquitous Internet connectivity to everyone anywhere on Earth. LEO satellite networks are en",
+        "url": "http://arxiv.org/abs/2401.07842v1"
+      }
+    ]
+  },
+  "AI evasion": {
+    "query": "AI agent honeypot evasion techniques",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Foundations of GenIR",
+        "summary": "The chapter discusses the foundational impact of modern generative AI models on information access (IA) systems. In contrast to traditional AI, the large-scale training and superior data modeling of generative AI models enable them to produce high-quality, human-like responses, which brings brand ne",
+        "url": "http://arxiv.org/abs/2501.02842v1"
+      },
+      {
+        "title": "LLM Agent Honeypot: Monitoring AI Hacking Agents in the Wild",
+        "summary": "Attacks powered by Large Language Model (LLM) agents represent a growing threat to modern cybersecurity. To address this concern, we present LLM Honeypot, a system designed to monitor autonomous AI hacking agents. By augmenting a standard SSH honeypot with prompt injection and time-based analysis te",
+        "url": "http://arxiv.org/abs/2410.13919v2"
+      },
+      {
+        "title": "Competing Visions of Ethical AI: A Case Study of OpenAI",
+        "summary": "Introduction. AI Ethics is framed distinctly across actors and stakeholder groups. We report results from a case study of OpenAI analysing ethical AI discourse. Method. Research addressed: How has OpenAI's public discourse leveraged 'ethics', 'safety', 'alignment' and adjacent related concepts over ",
+        "url": "http://arxiv.org/abs/2601.16513v1"
+      }
+    ]
+  },
+  "LLM attacks": {
+    "query": "LLM powered cyber attacks detection gaps",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Towards Automated Cyber Range Design: Characterizing and Matching Demands to Supplies",
+        "summary": "Cyber ranges mimic real-world cyber environments and are in high demand. Before building their own cyber ranges, organizations need to deeply understand what construction supplies are available to them. A fundamental supply is the cyber range architecture, which prompts an important research questio",
+        "url": "http://arxiv.org/abs/2307.04416v1"
+      },
+      {
+        "title": "Cyber Situation Awareness with Active Learning for Intrusion Detection",
+        "summary": "Intrusion detection has focused primarily on detecting cyberattacks at the event-level. Since there is such a large volume of network data and attacks are minimal, machine learning approaches have focused on improving accuracy and reducing false positives, but this has frequently resulted in overfit",
+        "url": "http://arxiv.org/abs/1912.12673v1"
+      },
+      {
+        "title": "Security Modelling for Cyber-Physical Systems: A Systematic Literature Review",
+        "summary": "Cyber-physical systems are at the intersection of digital technology and engineering domains, rendering them high-value targets of sophisticated and well-funded cybersecurity threat actors. Prominent cybersecurity attacks on CPS have brought attention to the vulnerability of these systems and the in",
+        "url": "http://arxiv.org/abs/2404.07527v3"
+      }
+    ]
+  },
+  "Autonomous AI": {
+    "query": "autonomous AI hacking agents",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Homological mirror symmetry for log Calabi-Yau surfaces",
+        "summary": "Given a log Calabi-Yau surface $Y$ with maximal boundary $D$ and distinguished complex structure, we explain how to construct a mirror Lefschetz fibration $w: M \\to \\mathbb{C}$, where $M$ is a Weinstein four-manifold, such that the directed Fukaya category of $w$ is isomorphic to $D^b \\text{Coh}(Y)$",
+        "url": "http://arxiv.org/abs/2005.05010v3"
+      },
+      {
+        "title": "Learning the Value Systems of Agents with Preference-based and Inverse Reinforcement Learning",
+        "summary": "Agreement Technologies refer to open computer systems in which autonomous software agents interact with one another, typically on behalf of humans, in order to come to mutually acceptable agreements. With the advance of AI systems in recent years, it has become apparent that such agreements, in orde",
+        "url": "http://arxiv.org/abs/2602.04518v1"
+      },
+      {
+        "title": "Foundations of GenIR",
+        "summary": "The chapter discusses the foundational impact of modern generative AI models on information access (IA) systems. In contrast to traditional AI, the large-scale training and superior data modeling of generative AI models enable them to produce high-quality, human-like responses, which brings brand ne",
+        "url": "http://arxiv.org/abs/2501.02842v1"
+      }
+    ]
+  },
+  "Neuromorphic": {
+    "query": "neuromorphic computing cybersecurity intrusion detection",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Synthetic Biology meets Neuromorphic Computing: Towards a bio-inspired Olfactory Perception System",
+        "summary": "In this study, we explore how the combination of synthetic biology, neuroscience modeling, and neuromorphic electronic systems offers a new approach to creating an artificial system that mimics the natural sense of smell. We argue that a co-design approach offers significant advantages in replicatin",
+        "url": "http://arxiv.org/abs/2504.10053v2"
+      },
+      {
+        "title": "Towards Autonomous Cybersecurity: An Intelligent AutoML Framework for Autonomous Intrusion Detection",
+        "summary": "The rapid evolution of mobile networks from 5G to 6G has necessitated the development of autonomous network management systems, such as Zero-Touch Networks (ZTNs). However, the increased complexity and automation of these networks have also escalated cybersecurity risks. Existing Intrusion Detection",
+        "url": "http://arxiv.org/abs/2409.03141v1"
+      },
+      {
+        "title": "A Hybrid Deep Learning Anomaly Detection Framework for Intrusion Detection",
+        "summary": "Cyber intrusion attacks that compromise the users' critical and sensitive data are escalating in volume and intensity, especially with the growing connections between our daily life and the Internet. The large volume and high complexity of such intrusion attacks have impeded the effectiveness of mos",
+        "url": "http://arxiv.org/abs/2212.00966v1"
+      }
+    ]
+  },
+  "Quantum ML": {
+    "query": "quantum machine learning intrusion detection honeypot",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "A Hybrid Deep Learning Anomaly Detection Framework for Intrusion Detection",
+        "summary": "Cyber intrusion attacks that compromise the users' critical and sensitive data are escalating in volume and intensity, especially with the growing connections between our daily life and the Internet. The large volume and high complexity of such intrusion attacks have impeded the effectiveness of mos",
+        "url": "http://arxiv.org/abs/2212.00966v1"
+      },
+      {
+        "title": "Changing Data Sources in the Age of Machine Learning for Official Statistics",
+        "summary": "Data science has become increasingly essential for the production of official statistics, as it enables the automated collection, processing, and analysis of large amounts of data. With such data science practices in place, it enables more timely, more insightful and more flexible reporting. However",
+        "url": "http://arxiv.org/abs/2306.04338v1"
+      },
+      {
+        "title": "DOME: Recommendations for supervised machine learning validation in biology",
+        "summary": "Modern biology frequently relies on machine learning to provide predictions and improve decision processes. There have been recent calls for more scrutiny on machine learning performance and possible limitations. Here we present a set of community-wide recommendations aiming to help establish standa",
+        "url": "http://arxiv.org/abs/2006.16189v4"
+      }
+    ]
+  },
+  "Digital twin": {
+    "query": "digital twin cybersecurity deception technology",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Digital Twin as a Service (DTaaS): A Platform for Digital Twin Developers and Users",
+        "summary": "Establishing digital twins is a non-trivial endeavour especially when users face significant challenges in creating them from scratch. Ready availability of reusable models, data and tool assets, can help with creation and use of digital twins. A number of digital twin frameworks exist to facilitate",
+        "url": "http://arxiv.org/abs/2305.07244v2"
+      },
+      {
+        "title": "Enabling Automated Integration Testing of Smart Farming Applications via Digital Twin Prototypes",
+        "summary": "Industry 4.0 represents a major technological shift that has the potential to transform the manufacturing industry, making it more efficient, productive, and sustainable. Smart farming is a concept that involves the use of advanced technologies to improve the efficiency and sustainability of agricul",
+        "url": "http://arxiv.org/abs/2311.05748v1"
+      },
+      {
+        "title": "Digital Twin As A Cost Reduction Method",
+        "summary": "Many fields have been affected by the introduction of concepts such as sensors, industry 4.0, internet of things, machine learning and artificial intelligence in recent years. As a result of the interaction of cyber physical systems with these concepts, digital twin model has emerged. The concept of",
+        "url": "http://arxiv.org/abs/2107.14109v1"
+      }
+    ]
+  },
+  "Adversarial ML": {
+    "query": "adversarial machine learning honeypot defense",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Changing Data Sources in the Age of Machine Learning for Official Statistics",
+        "summary": "Data science has become increasingly essential for the production of official statistics, as it enables the automated collection, processing, and analysis of large amounts of data. With such data science practices in place, it enables more timely, more insightful and more flexible reporting. However",
+        "url": "http://arxiv.org/abs/2306.04338v1"
+      },
+      {
+        "title": "DOME: Recommendations for supervised machine learning validation in biology",
+        "summary": "Modern biology frequently relies on machine learning to provide predictions and improve decision processes. There have been recent calls for more scrutiny on machine learning performance and possible limitations. Here we present a set of community-wide recommendations aiming to help establish standa",
+        "url": "http://arxiv.org/abs/2006.16189v4"
+      },
+      {
+        "title": "Law and Adversarial Machine Learning",
+        "summary": "When machine learning systems fail because of adversarial manipulation, how should society expect the law to respond? Through scenarios grounded in adversarial ML literature, we explore how some aspects of computer crime, copyright, and tort law interface with perturbation, poisoning, model stealing",
+        "url": "http://arxiv.org/abs/1810.10731v3"
+      }
+    ]
+  },
+  "Multi-agent RL": {
+    "query": "multi-agent reinforcement learning cybersecurity",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "A Survey of Multi-Agent Deep Reinforcement Learning with Communication",
+        "summary": "Communication is an effective mechanism for coordinating the behaviors of multiple agents, broadening their views of the environment, and to support their collaborations. In the field of multi-agent deep reinforcement learning (MADRL), agents can improve the overall learning performance and achieve ",
+        "url": "http://arxiv.org/abs/2203.08975v2"
+      },
+      {
+        "title": "Variational Policy Propagation for Multi-agent Reinforcement Learning",
+        "summary": "We propose a \\emph{collaborative} multi-agent reinforcement learning algorithm named variational policy propagation (VPP) to learn a \\emph{joint} policy through the interactions over agents. We prove that the joint policy is a Markov Random Field under some mild conditions, which in turn reduces the",
+        "url": "http://arxiv.org/abs/2004.08883v4"
+      },
+      {
+        "title": "Learning Bilateral Team Formation in Cooperative Multi-Agent Reinforcement Learning",
+        "summary": "Team formation and the dynamics of team-based learning have drawn significant interest in the context of Multi-Agent Reinforcement Learning (MARL). However, existing studies primarily focus on unilateral groupings, predefined teams, or fixed-population settings, leaving the effects of algorithmic bi",
+        "url": "http://arxiv.org/abs/2506.20039v1"
+      }
+    ]
+  },
+  "Federated": {
+    "query": "federated learning honeypot collaborative defense",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Federated and Transfer Learning: A Survey on Adversaries and Defense Mechanisms",
+        "summary": "The advent of federated learning has facilitated large-scale data exchange amongst machine learning models while maintaining privacy. Despite its brief history, federated learning is rapidly evolving to make wider use more practical. One of the most significant advancements in this domain is the inc",
+        "url": "http://arxiv.org/abs/2207.02337v1"
+      },
+      {
+        "title": "VAFL: a Method of Vertical Asynchronous Federated Learning",
+        "summary": "Horizontal Federated learning (FL) handles multi-client data that share the same set of features, and vertical FL trains a better predictor that combine all the features from different clients. This paper targets solving vertical FL in an asynchronous fashion, and develops a simple FL method. The ne",
+        "url": "http://arxiv.org/abs/2007.06081v1"
+      },
+      {
+        "title": "Towards More Efficient Data Valuation in Healthcare Federated Learning using Ensembling",
+        "summary": "Federated Learning (FL) wherein multiple institutions collaboratively train a machine learning model without sharing data is becoming popular. Participating institutions might not contribute equally, some contribute more data, some better quality data or some more diverse data. To fairly rank the co",
+        "url": "http://arxiv.org/abs/2209.05424v1"
+      }
+    ]
+  },
+  "XAI honeypot": {
+    "query": "explainable AI honeypot decisions",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Interaction Design for Explainable AI: Workshop Proceedings",
+        "summary": "As artificial intelligence (AI) systems become increasingly complex and ubiquitous, these systems will be responsible for making decisions that directly affect individuals and society as a whole. Such decisions will need to be justified due to ethical concerns as well as trust, but achieving this ha",
+        "url": "http://arxiv.org/abs/1812.08597v1"
+      },
+      {
+        "title": "Proceedings of The second international workshop on eXplainable AI for the Arts (XAIxArts)",
+        "summary": "This second international workshop on explainable AI for the Arts (XAIxArts) brought together a community of researchers in HCI, Interaction Design, AI, explainable AI (XAI), and digital arts to explore the role of XAI for the Arts. Workshop held at the 16th ACM Conference on Creativity and Cognitio",
+        "url": "http://arxiv.org/abs/2406.14485v8"
+      },
+      {
+        "title": "Need of AI in Modern Education: in the Eyes of Explainable AI (xAI)",
+        "summary": "Modern Education is not \\textit{Modern} without AI. However, AI's complex nature makes understanding and fixing problems challenging. Research worldwide shows that a parent's income greatly influences a child's education. This led us to explore how AI, especially complex models, makes important deci",
+        "url": "http://arxiv.org/abs/2408.00025v3"
+      }
+    ]
+  },
+  "Human factors": {
+    "query": "human attacker psychology honeypot engagement",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Robots in the Danger Zone: Exploring Public Perception through Engagement",
+        "summary": "Public perceptions of Robotics and Artificial Intelligence (RAI) are important in the acceptance, uptake, government regulation and research funding of this technology. Recent research has shown that the public's understanding of RAI can be negative or inaccurate. We believe effective public engagem",
+        "url": "http://arxiv.org/abs/2004.00689v1"
+      },
+      {
+        "title": "Needs-aware Artificial Intelligence: AI that 'serves [human] needs'",
+        "summary": "By defining the current limits (and thereby the frontiers), many boundaries are shaping, and will continue to shape, the future of Artificial Intelligence (AI). We push on these boundaries in order to make further progress into what were yesterday's frontiers. They are both pliable and resilient - a",
+        "url": "http://arxiv.org/abs/2202.04977v3"
+      },
+      {
+        "title": "Designing AI Systems that Augment Human Performed vs. Demonstrated Critical Thinking",
+        "summary": "The recent rapid advancement of LLM-based AI systems has accelerated our search and production of information. While the advantages brought by these systems seemingly improve the performance or efficiency of human activities, they do not necessarily enhance human capabilities. Recent research has st",
+        "url": "http://arxiv.org/abs/2504.14689v1"
+      }
+    ]
+  },
+  "Cognitive": {
+    "query": "cognitive hacking social engineering honeypot",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Homological mirror symmetry for log Calabi-Yau surfaces",
+        "summary": "Given a log Calabi-Yau surface $Y$ with maximal boundary $D$ and distinguished complex structure, we explain how to construct a mirror Lefschetz fibration $w: M \\to \\mathbb{C}$, where $M$ is a Weinstein four-manifold, such that the directed Fukaya category of $w$ is isomorphic to $D^b \\text{Coh}(Y)$",
+        "url": "http://arxiv.org/abs/2005.05010v3"
+      },
+      {
+        "title": "Exploring the Impact of Reflexivity Theory and Cognitive Social Structures on the Dynamics of Doctor-Patient Social System",
+        "summary": "Conventional economic and socio-behavioural models assume perfect symmetric access to information and rational behaviour among interacting agents in a social system. However, real-world events and observations appear to contradict such assumptions, leading to the possibility of other, more complex i",
+        "url": "http://arxiv.org/abs/2411.06011v1"
+      },
+      {
+        "title": "Cognitive Biases in Software Engineering: A Systematic Mapping Study",
+        "summary": "One source of software project challenges and failures is the systematic errors introduced by human cognitive biases. Although extensively explored in cognitive psychology, investigations concerning cognitive biases have only recently gained popularity in software engineering (SE) research. This pap",
+        "url": "http://arxiv.org/abs/1707.03869v3"
+      }
+    ]
+  },
+  "Zero day": {
+    "query": "zero day attack honeypot detection limitations",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Introduction to Voice Presentation Attack Detection and Recent Advances",
+        "summary": "Over the past few years significant progress has been made in the field of presentation attack detection (PAD) for automatic speaker recognition (ASV). This includes the development of new speech corpora, standard evaluation protocols and advancements in front-end feature extraction and back-end cla",
+        "url": "http://arxiv.org/abs/1901.01085v1"
+      },
+      {
+        "title": "Detecting Botnets Through Log Correlation",
+        "summary": "Botnets, which consist of thousands of compromised machines, can cause significant threats to other systems by launching Distributed Denial of Service (SSoS) attacks, keylogging, and backdoors. In response to these threats, new effective techniques are needed to detect the presence of botnets. In th",
+        "url": "http://arxiv.org/abs/1001.2665v1"
+      },
+      {
+        "title": "HoneyDOC: An Efficient Honeypot Architecture Enabling All-Round Design",
+        "summary": "Honeypots are designed to trap the attacker with the purpose of investigating its malicious behavior. Owing to the increasing variety and sophistication of cyber attacks, how to capture high-quality attack data has become a challenge in the context of honeypot area. All-round honeypots, which mean s",
+        "url": "http://arxiv.org/abs/2402.06516v1"
+      }
+    ]
+  },
+  "APT gaps": {
+    "query": "advanced persistent threat honeypot gaps",
+    "searx": [],
+    "arxiv": [
+      {
+        "title": "Assessing the risk of advanced persistent threats",
+        "summary": "As a new type of cyber attacks, advanced persistent threats (APTs) pose a severe threat to modern society. This paper focuses on the assessment of the risk of APTs. Based on a dynamic model characterizing the time evolution of the state of an organization, the organization's risk is defined as its m",
+        "url": "http://arxiv.org/abs/1707.02437v2"
+      },
+      {
+        "title": "Defense for Advanced Persistent Threat with Inadvertent or Malicious Insider Threats",
+        "summary": "In this paper, we propose a game-theoretical framework to investigate advanced persistent threat problems with two types of insider threats: malicious and inadvertent. Within this framework, a unified three-player game is established and Nash equilibria are obtained in response to different insiders",
+        "url": "http://arxiv.org/abs/2209.08476v1"
+      },
+      {
+        "title": "A Cyber-Twin Based Honeypot for Gathering Threat Intelligence",
+        "summary": "Critical Infrastructure (CI) is prone to cyberattacks. Several techniques have been developed to protect CI against such attacks. In this work, we describe a honeypot based on a cyber twin for a water treatment plant. The honeypot is intended to serve as a realistic replica of a water treatment plan",
+        "url": "http://arxiv.org/abs/2509.09222v1"
+      }
+    ]
+  }
+}

@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { 
   Shield, Activity, Server, AlertTriangle, Settings, Menu,
-  Wifi, WifiOff, LogOut, ChevronLeft, Brain
+  Wifi, WifiOff, LogOut, ChevronLeft, Brain, Target
 } from 'lucide-react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useAuth } from '../contexts/AuthContext'
@@ -93,6 +93,7 @@ function LayoutContent({ children }: LayoutProps) {
     { name: 'Honeypots', href: '/honeypots', icon: Server },
     { name: 'Attacks', href: '/attacks', icon: AlertTriangle },
     { name: 'AI Monitor', href: '/ai-monitor', icon: Brain },
+    { name: 'Cognitive', href: '/cognitive', icon: Target },
     { name: 'Settings', href: '/settings', icon: Settings },
   ]
 

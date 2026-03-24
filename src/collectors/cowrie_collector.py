@@ -1,6 +1,7 @@
 """
 Cowrie log collector - ingests Cowrie honeypot logs into the database.
 Extracts real IPs, session tracking, and broadcasts via WebSocket.
+Integrates with Cognitive Deception Engine for real-time command analysis.
 """
 import asyncio
 import json
@@ -15,6 +16,11 @@ from docker.errors import DockerException
 
 from src.core.db import get_db
 from src.core.db.models import Session, AttackEvent, AttackSeverity, AttackType, ThreatLevel
+from src.collectors.cognitive_bridge import (
+    get_cognitive_bridge,
+    CognitiveIntegrationBridge,
+    CognitiveAnalysisResult,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +66,7 @@ class CowrieLogCollector:
     }
     
     def __init__(self):
-        """Initialize Docker client."""
+        """Initialize Docker client and cognitive integration."""
         try:
             self.client = docker.from_env()
             self._running = False
@@ -70,6 +76,10 @@ class CowrieLogCollector:
             self._processed_lines: Set[str] = set()
             # WebSocket manager reference
             self._ws_manager = None
+            # Cognitive integration bridge
+            self._cognitive_bridge: Optional[CognitiveIntegrationBridge] = None
+            # Store cognitive analysis results for sessions
+            self._cognitive_results: Dict[str, CognitiveAnalysisResult] = {}
         except DockerException as e:
             logger.error(f"Failed to connect to Docker: {e}")
             raise
@@ -77,6 +87,17 @@ class CowrieLogCollector:
     def set_ws_manager(self, manager):
         """Set WebSocket manager for broadcasting events."""
         self._ws_manager = manager
+        # Also set on cognitive bridge if initialized
+        if self._cognitive_bridge:
+            self._cognitive_bridge.set_ws_manager(manager)
+    
+    def _get_cognitive_bridge(self) -> CognitiveIntegrationBridge:
+        """Get or initialize the cognitive bridge."""
+        if self._cognitive_bridge is None:
+            self._cognitive_bridge = get_cognitive_bridge()
+            if self._ws_manager:
+                self._cognitive_bridge.set_ws_manager(self._ws_manager)
+        return self._cognitive_bridge
     
     async def start(self, poll_interval: int = 2):
         """
@@ -255,15 +276,32 @@ class CowrieLogCollector:
             source_ip = cmd_match.group(1)
             command = cmd_match.group(2).strip()
             
+            # Find session ID for this source IP
+            session_id = self._find_session_id(source_ip, honeypot_id)
+            
+            # Process command through cognitive deception engine
+            cognitive_result = await self._process_command_cognitively(
+                session_id=session_id,
+                source_ip=source_ip,
+                command=command,
+                honeypot_id=honeypot_id,
+                timestamp=timestamp,
+            )
+            
+            # Create attack event with cognitive data
             await self._create_attack_event(
                 honeypot_id=honeypot_id,
                 honeypot_name=honeypot_name,
                 event_type="command",
                 source_ip=source_ip,
                 source_port=0,
-                data={"command": command},
+                data={
+                    "command": command,
+                    "cognitive_analysis": cognitive_result.to_dict() if cognitive_result else None,
+                },
                 timestamp=timestamp,
                 severity="info",
+                session_id=session_id,
             )
             return
         
@@ -272,6 +310,11 @@ class CowrieLogCollector:
         if conn_lost_match:
             source_ip = conn_lost_match.group(1)
             duration = float(conn_lost_match.group(2))
+            
+            # Find and end cognitive session
+            session_id = self._find_session_id(source_ip, honeypot_id)
+            if session_id:
+                await self._end_cognitive_session(session_id)
             
             await self._create_attack_event(
                 honeypot_id=honeypot_id,
@@ -282,6 +325,7 @@ class CowrieLogCollector:
                 data={"duration_seconds": duration},
                 timestamp=timestamp,
                 severity="info",
+                session_id=session_id,
             )
             return
         
@@ -459,6 +503,147 @@ class CowrieLogCollector:
                 
         except Exception as e:
             logger.debug(f"Failed to send to AI: {e}")
+    
+    def _find_session_id(self, source_ip: str, honeypot_id: str) -> Optional[str]:
+        """
+        Find the database session ID for a source IP and honeypot.
+        
+        Args:
+            source_ip: Source IP address
+            honeypot_id: Honeypot identifier
+            
+        Returns:
+            Session ID if found, None otherwise
+        """
+        for sess_id, sess_data in self._active_sessions.items():
+            if (sess_data.get("ip") == source_ip and 
+                sess_data.get("honeypot_id") == honeypot_id):
+                return sess_data.get("db_session_id")
+        return None
+    
+    async def _process_command_cognitively(
+        self,
+        session_id: Optional[str],
+        source_ip: str,
+        command: str,
+        honeypot_id: str,
+        timestamp: datetime,
+    ) -> Optional[CognitiveAnalysisResult]:
+        """
+        Process a command through the Cognitive Deception Engine.
+        
+        Routes the command through cognitive analysis to generate
+        a deceptive response and update the attacker's profile.
+        
+        Args:
+            session_id: Database session ID (may be None)
+            source_ip: Source IP of the attacker
+            command: The command to process
+            honeypot_id: Honeypot identifier
+            timestamp: Command timestamp
+            
+        Returns:
+            CognitiveAnalysisResult if processing succeeded
+        """
+        try:
+            # Get cognitive bridge
+            bridge = self._get_cognitive_bridge()
+            
+            # Use IP-based session ID if no db_session_id
+            effective_session_id = session_id or f"cog-{source_ip}-{honeypot_id[:8]}"
+            
+            # Build session data
+            session_data = {
+                "honeypot_id": honeypot_id,
+                "source_ip": source_ip,
+                "started_at": timestamp.isoformat(),
+            }
+            
+            # Process through cognitive engine
+            result = await bridge.process_command(
+                session_id=effective_session_id,
+                command=command,
+                source_ip=source_ip,
+                session_data=session_data,
+            )
+            
+            # Store result for later retrieval
+            self._cognitive_results[effective_session_id] = result
+            
+            logger.info(
+                f"Cognitive analysis: session={effective_session_id}, "
+                f"command='{command[:30]}...', strategy={result.deception_response.strategy_used}"
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in cognitive processing: {e}")
+            return None
+    
+    async def _end_cognitive_session(self, session_id: str):
+        """
+        End a cognitive profiling session.
+        
+        Finalizes the cognitive profile and stores the final analysis.
+        
+        Args:
+            session_id: Session to end
+        """
+        try:
+            bridge = self._get_cognitive_bridge()
+            summary = await bridge.end_session(session_id)
+            
+            if summary:
+                logger.info(
+                    f"Cognitive session ended: {session_id}, "
+                    f"commands={summary.get('total_commands', 0)}, "
+                    f"biases={len(summary.get('final_profile', {}).get('detected_biases', []))}"
+                )
+                
+                # Broadcast final profile
+                if self._ws_manager:
+                    await self._ws_manager.broadcast({
+                        "type": "cognitive_session_summary",
+                        "session_id": session_id,
+                        "summary": summary,
+                    })
+            
+            # Clean up stored result
+            self._cognitive_results.pop(session_id, None)
+            
+        except Exception as e:
+            logger.error(f"Error ending cognitive session: {e}")
+    
+    def get_cognitive_result(self, session_id: str) -> Optional[CognitiveAnalysisResult]:
+        """
+        Get the latest cognitive analysis result for a session.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Latest CognitiveAnalysisResult or None
+        """
+        return self._cognitive_results.get(session_id)
+    
+    async def get_cognitive_profile(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the cognitive profile for a session.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Cognitive profile dictionary or None
+        """
+        try:
+            bridge = self._get_cognitive_bridge()
+            profile = bridge.engine.get_profile(session_id)
+            return profile.to_dict() if profile else None
+        except Exception as e:
+            logger.error(f"Error getting cognitive profile: {e}")
+            return None
 
 
 # Global collector instance

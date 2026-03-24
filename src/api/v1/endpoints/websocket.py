@@ -209,3 +209,33 @@ async def broadcast_execution_complete(execution_data: dict):
         "data": execution_data,
         "timestamp": datetime.utcnow().isoformat(),
     })
+
+
+async def broadcast_cognitive_analysis(session_id: str, analysis: dict):
+    """Broadcast cognitive analysis result."""
+    await manager.broadcast({
+        "type": "cognitive_analysis",
+        "session_id": session_id,
+        "data": analysis,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, channel="cognitive")
+
+
+async def broadcast_deception_applied(session_id: str, deception: dict):
+    """Broadcast when a deception strategy is applied."""
+    await manager.broadcast({
+        "type": "deception_applied",
+        "session_id": session_id,
+        "data": deception,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, channel="deception")
+
+
+async def broadcast_bias_detected(session_id: str, bias: dict):
+    """Broadcast when a cognitive bias is detected."""
+    await manager.broadcast({
+        "type": "bias_detected",
+        "session_id": session_id,
+        "data": bias,
+        "timestamp": datetime.utcnow().isoformat(),
+    }, channel="cognitive")

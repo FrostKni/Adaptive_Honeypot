@@ -7,6 +7,7 @@ import Honeypots from './pages/Honeypots'
 import Attacks from './pages/Attacks'
 import Settings from './pages/Settings'
 import AIMonitor from './pages/AIMonitor'
+import CognitiveDashboard from './pages/CognitiveDashboard'
 import Login from './pages/Login'
 
 const queryClient = new QueryClient({
@@ -82,6 +83,16 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <AIMonitor />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cognitive"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <CognitiveDashboard />
             </Layout>
           </ProtectedRoute>
         }

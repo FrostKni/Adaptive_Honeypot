@@ -176,6 +176,8 @@ class Session(Base):
     # Relationships
     honeypot: Mapped["Honeypot"] = relationship(back_populates="sessions")
     events: Mapped[List["AttackEvent"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    cognitive_profiles: Mapped[List["CognitiveProfileDB"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    deception_events: Mapped[List["DeceptionEventDB"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     
     __table_args__ = (
         Index("ix_sessions_source_ip", "source_ip"),
@@ -428,4 +430,89 @@ class AuditLog(Base):
         Index("ix_audit_logs_action", "action"),
         Index("ix_audit_logs_created_at", "created_at"),
         Index("ix_audit_logs_resource", "resource_type", "resource_id"),
+    )
+
+
+class CognitiveProfileDB(Base):
+    """Cognitive profile of attacker sessions for deception tracking."""
+    __tablename__ = "cognitive_profiles"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(100), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+    
+    # Detected biases (JSON array of bias objects)
+    detected_biases: Mapped[List[Dict]] = mapped_column(JSON, default=list)
+    
+    # Mental model
+    beliefs: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    knowledge: Mapped[List[str]] = mapped_column(JSON, default=list)
+    goals: Mapped[List[str]] = mapped_column(JSON, default=list)
+    expectations: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    
+    # Cognitive metrics
+    overconfidence_score: Mapped[float] = mapped_column(Float, default=0.0)
+    persistence_score: Mapped[float] = mapped_column(Float, default=0.0)
+    tunnel_vision_score: Mapped[float] = mapped_column(Float, default=0.0)
+    curiosity_score: Mapped[float] = mapped_column(Float, default=0.0)
+    exploration_diversity: Mapped[float] = mapped_column(Float, default=0.0)
+    error_tolerance: Mapped[float] = mapped_column(Float, default=0.5)
+    learning_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    # Deception metrics
+    total_deceptions_applied: Mapped[int] = mapped_column(Integer, default=0)
+    successful_deceptions: Mapped[int] = mapped_column(Integer, default=0)
+    deception_success_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    suspicion_level: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    # Behavioral signals (raw data for analysis)
+    signals: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_final: Mapped[bool] = mapped_column(Boolean, default=False)  # True when session ends
+    
+    # Relationships
+    session: Mapped["Session"] = relationship(back_populates="cognitive_profiles")
+    
+    __table_args__ = (
+        Index("ix_cognitive_profiles_session_id", "session_id"),
+        Index("ix_cognitive_profiles_updated_at", "updated_at"),
+    )
+
+
+class DeceptionEventDB(Base):
+    """Record of deception events applied during sessions."""
+    __tablename__ = "deception_events"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(100), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+    
+    # Deception details
+    bias_type: Mapped[str] = mapped_column(String(50), nullable=False)  # Which bias was targeted
+    strategy_name: Mapped[str] = mapped_column(String(100), nullable=False)  # Strategy used
+    trigger_command: Mapped[str] = mapped_column(Text, nullable=False)  # Command that triggered
+    
+    # Response
+    response_type: Mapped[str] = mapped_column(String(50))  # Type of response generated
+    response_content: Mapped[Optional[str]] = mapped_column(Text)  # Actual response (optional)
+    
+    # Effectiveness tracking
+    attacker_reacted: Mapped[bool] = mapped_column(Boolean, default=False)  # Did attacker respond?
+    reaction_type: Mapped[Optional[str]] = mapped_column(String(50))  # Type of reaction
+    effectiveness_score: Mapped[Optional[float]] = mapped_column(Float)  # Calculated effectiveness
+    
+    # Metadata
+    event_metadata: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    # Relationships
+    session: Mapped["Session"] = relationship(back_populates="deception_events")
+    
+    __table_args__ = (
+        Index("ix_deception_events_session_id", "session_id"),
+        Index("ix_deception_events_bias_type", "bias_type"),
+        Index("ix_deception_events_created_at", "created_at"),
     )
