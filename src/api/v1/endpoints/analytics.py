@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from src.core.security import AuthContext, get_current_auth
-from src.core.db import get_db, HoneypotStatus
+from src.core.db import get_db, get_db_context, HoneypotStatus
 from src.core.db.models import Honeypot, Session, AttackEvent, Adaptation
 from src.core.db.repositories import HoneypotRepository, SessionRepository, AdaptationRepository
 
@@ -76,7 +76,7 @@ async def get_dashboard_stats(
     auth: AuthContext=Depends(get_current_auth),
 ):
     """Get dashboard statistics from real database data."""
-    async for session in get_db():
+    async with get_db_context() as session:
         # Get active honeypots count
         hp_repo = HoneypotRepository(session)
         active_honeypots = await hp_repo.count({"status": HoneypotStatus.RUNNING})
@@ -220,8 +220,8 @@ async def get_attack_locations(
 ):
     """Get attack locations with coordinates for map visualization."""
     from src.core.geoip import get_geoip_service
-    
-    async for session in get_db():
+
+    async with get_db_context() as session:
         since = datetime.utcnow() - timedelta(hours=hours)
         
         # Get unique IPs with attack counts (SQLite compatible)

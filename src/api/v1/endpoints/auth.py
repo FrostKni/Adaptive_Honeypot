@@ -18,7 +18,7 @@ from src.core.security import (
     get_current_auth,
     AuthContext,
 )
-from src.core.db import get_db, APIKeyRepository
+from src.core.db import get_db, get_db_context, APIKeyRepository
 from src.core.config import settings
 
 
@@ -80,22 +80,28 @@ class AuthInfo(BaseModel):
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest):
     """Login and get JWT tokens."""
-    # TODO: Implement proper user authentication
-    
-    # For now, check against admin credentials
-    if data.username == "admin" and data.password == "admin":
+    admin_user = settings.admin_username
+    admin_pass = settings.admin_password
+
+    if not admin_pass:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ADMIN_PASSWORD environment variable not set",
+        )
+
+    if data.username == admin_user and data.password == admin_pass:
         access_token = create_access_token(
             subject=data.username,
             scopes=["admin", "honeypots:read", "honeypots:write", "attacks:read", "sessions:read"],
         )
         refresh_token = create_refresh_token(data.username)
-        
+
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
             expires_in=settings.security.jwt_expire_minutes * 60,
         )
-    
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid credentials",
@@ -152,7 +158,7 @@ async def create_api_key(
     if data.expires_days:
         expires_at = datetime.utcnow() + timedelta(days=data.expires_days)
     
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = APIKeyRepository(session)
         
         api_key = await repo.create(
@@ -167,7 +173,7 @@ async def create_api_key(
         
         return APIKeyResponse(
             id=api_key.id,
-            key=raw_key,  # Only time this is shown
+            key=raw_key,
             name=api_key.name,
             description=api_key.description,
             is_admin=api_key.is_admin,
@@ -182,7 +188,7 @@ async def list_api_keys(auth: AuthContext = Depends(get_current_auth)):
     """List all API keys."""
     auth.require_scope("admin")
     
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = APIKeyRepository(session)
         keys = await repo.get_all()
         
@@ -206,7 +212,7 @@ async def revoke_api_key(
     """Revoke an API key."""
     auth.require_scope("admin")
     
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = APIKeyRepository(session)
         deleted = await repo.delete(key_id)
         

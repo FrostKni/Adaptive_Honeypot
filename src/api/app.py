@@ -63,6 +63,26 @@ class TimingMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RateLimitHeadersMiddleware(BaseHTTPMiddleware):
+    """Add rate limit headers to responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        # Add rate limit headers if available in request state
+        # These are set by the check_endpoint_rate_limit dependency
+        rate_limit_info = getattr(request.state, "rate_limit_info", None)
+
+        if rate_limit_info:
+            response.headers["X-RateLimit-Limit"] = str(rate_limit_info.get("limit", 0))
+            response.headers["X-RateLimit-Remaining"] = str(
+                rate_limit_info.get("remaining", 0)
+            )
+            response.headers["X-RateLimit-Reset"] = str(rate_limit_info.get("reset", 0))
+
+        return response
+
+
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
     """Global error handling middleware."""
 
@@ -223,6 +243,9 @@ def create_app() -> FastAPI:
 
     # Request ID
     app.add_middleware(RequestIDMiddleware)
+
+    # Rate Limit Headers
+    app.add_middleware(RateLimitHeadersMiddleware)
 
     # Timing
     app.add_middleware(TimingMiddleware)

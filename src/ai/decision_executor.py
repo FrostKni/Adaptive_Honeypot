@@ -78,16 +78,17 @@ class DecisionExecutor:
     
     def __init__(self):
         """Initialize Docker client and tracking."""
+        self._execution_history: List[ExecutionResult] = []
+        self._max_history = 100
+        self.client = None
+        self.api_client = None
         try:
             self.client = docker.from_env()
             self.api_client = docker.APIClient()
             self._ensure_isolated_network()
-            self._execution_history: List[ExecutionResult] = []
-            self._max_history = 100
             logger.info("DecisionExecutor initialized")
         except DockerException as e:
-            logger.error(f"Failed to initialize DecisionExecutor: {e}")
-            raise
+            logger.warning(f"Docker unavailable, DecisionExecutor running in no-op mode: {e}")
     
     def _ensure_isolated_network(self):
         """Create isolated network for quarantine if not exists."""
@@ -546,8 +547,8 @@ class DecisionExecutor:
 _executor: Optional[DecisionExecutor] = None
 
 
-def get_executor() -> DecisionExecutor:
-    """Get the singleton DecisionExecutor instance."""
+def get_executor() -> Optional[DecisionExecutor]:
+    """Get the singleton DecisionExecutor instance, or None if Docker is unavailable."""
     global _executor
     if _executor is None:
         _executor = DecisionExecutor()

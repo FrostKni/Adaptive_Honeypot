@@ -338,3 +338,190 @@ async def check_rate_limit(
         raise RateLimitExceeded(retry_after)
 
     return True
+
+
+# ==================== Endpoint-Specific Rate Limiting ====================
+
+
+# Endpoint-specific rate limit configuration
+ENDPOINT_RATE_LIMITS = {
+    # Authentication endpoints - stricter limits
+    "/api/v1/auth/login": {"requests": 5, "window": 60},  # 5 per minute
+    "/api/v1/auth/register": {"requests": 3, "window": 3600},  # 3 per hour
+    "/api/v1/auth/refresh": {"requests": 10, "window": 60},  # 10 per minute
+    # Write operations - moderate limits
+    "/api/v1/honeypots": {"requests": 20, "window": 60},  # 20 per minute for POST
+    "/api/v1/honeypots/{id}": {
+        "requests": 30,
+        "window": 60,
+    },  # 30 per minute for PUT/DELETE
+    "/api/v1/adaptations": {"requests": 10, "window": 60},  # 10 per minute
+    "/api/v1/settings": {"requests": 5, "window": 60},  # 5 per minute
+    # Read operations - generous limits
+    "/api/v1/analytics": {"requests": 60, "window": 60},  # 60 per minute
+    "/api/v1/sessions": {"requests": 100, "window": 60},  # 100 per minute
+    "/api/v1/attacks": {"requests": 100, "window": 60},  # 100 per minute
+    "/api/v1/threat-intel": {"requests": 100, "window": 60},  # 100 per minute
+    # AI endpoints - very strict limits (expensive operations)
+    "/api/v1/ai/analyze": {"requests": 10, "window": 60},  # 10 per minute
+    "/api/v1/ai/monitoring": {"requests": 30, "window": 60},  # 30 per minute
+    # Admin endpoints - strict limits
+    "/api/v1/admin": {"requests": 20, "window": 60},  # 20 per minute
+    "/api/v1/admin/api-keys": {"requests": 10, "window": 60},  # 10 per minute
+}
+
+
+# Store endpoint-specific rate limiters
+_endpoint_limiters: Dict[str, RedisRateLimiter] = {}
+
+
+async def get_endpoint_limiter(
+    endpoint: str, requests: int, window_seconds: int
+) -> RedisRateLimiter:
+    """
+    Get or create an endpoint-specific rate limiter.
+
+    Args:
+        endpoint: The endpoint path (can include {id} patterns)
+        requests: Maximum requests per window
+        window_seconds: Time window in seconds
+
+    Returns:
+        RedisRateLimiter instance for the endpoint
+    """
+    cache_key = f"{endpoint}:{requests}:{window_seconds}"
+
+    if cache_key not in _endpoint_limiters:
+        redis_client = await get_redis_client()
+        _endpoint_limiters[cache_key] = RedisRateLimiter(
+            redis_client=redis_client,
+            requests=requests,
+            window_seconds=window_seconds,
+            fallback_to_memory=True,
+        )
+
+        if redis_client:
+            logger.info(f"Created Redis-backed rate limiter for endpoint: {endpoint}")
+        else:
+            logger.info(f"Created in-memory rate limiter for endpoint: {endpoint}")
+
+    return _endpoint_limiters[cache_key]
+
+
+def match_endpoint_pattern(request_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Match request path to endpoint rate limit pattern.
+
+    Args:
+        request_path: The actual request path
+
+    Returns:
+        Rate limit config dict if match found, None otherwise
+    """
+    # Direct match first
+    if request_path in ENDPOINT_RATE_LIMITS:
+        return ENDPOINT_RATE_LIMITS[request_path]
+
+    # Pattern matching (e.g., /api/v1/honeypots/abc123 -> /api/v1/honeypots/{id})
+    path_parts = request_path.split("/")
+    for pattern, config in ENDPOINT_RATE_LIMITS.items():
+        pattern_parts = pattern.split("/")
+
+        if len(path_parts) != len(pattern_parts):
+            continue
+
+        match = True
+        for i, (path_part, pattern_part) in enumerate(zip(path_parts, pattern_parts)):
+            if pattern_part.startswith("{") and pattern_part.endswith("}"):
+                # Wildcard match
+                continue
+            elif path_part != pattern_part:
+                match = False
+                break
+
+        if match:
+            return config
+
+    return None
+
+
+async def check_endpoint_rate_limit(
+    request: Request, auth: AuthContext = Depends(get_current_auth)
+) -> Dict[str, int]:
+    """
+    Dependency to check endpoint-specific rate limits.
+
+    Returns rate limit info for headers:
+        - limit: Maximum requests allowed
+        - remaining: Requests remaining in window
+        - reset: Seconds until window resets
+    """
+    request_path = request.url.path
+
+    # Match endpoint to rate limit config
+    config = match_endpoint_pattern(request_path)
+
+    if not config:
+        # Fall back to global rate limit
+        limiter = get_rate_limiter()
+        key = f"{auth.subject}"
+        allowed, retry_after = await limiter.is_allowed(key)
+
+        if not allowed:
+            raise RateLimitExceeded(retry_after)
+
+        # Return global limit info
+        rate_limit_info = {
+            "limit": settings.security.rate_limit_requests,
+            "remaining": max(0, settings.security.rate_limit_requests - 1),
+            "reset": settings.security.rate_limit_window,
+        }
+        request.state.rate_limit_info = rate_limit_info
+        return rate_limit_info
+
+    # Get endpoint-specific limiter
+    limiter = await get_endpoint_limiter(
+        endpoint=request_path,
+        requests=config["requests"],
+        window_seconds=config["window"],
+    )
+
+    key = f"{auth.subject}:{request_path}"
+    allowed, retry_after = await limiter.is_allowed(key)
+
+    if not allowed:
+        raise RateLimitExceeded(retry_after)
+
+    # Calculate remaining (approximate)
+    # Note: This is an approximation; actual remaining count would need more state
+    rate_limit_info = {
+        "limit": config["requests"],
+        "remaining": max(0, config["requests"] - 1),
+        "reset": config["window"],
+    }
+
+    # Store in request state for middleware
+    request.state.rate_limit_info = rate_limit_info
+
+    return rate_limit_info
+
+    # Get endpoint-specific limiter
+    limiter = await get_endpoint_limiter(
+        endpoint=request_path,
+        requests=config["requests"],
+        window_seconds=config["window"],
+    )
+
+    key = f"{auth.subject}:{request_path}"
+    allowed, retry_after = await limiter.is_allowed(key)
+
+    if not allowed:
+        raise RateLimitExceeded(retry_after)
+
+    # Calculate remaining (approximate)
+    # Note: This is an approximation; actual remaining count would need more state
+    return {
+        "limit": config["requests"],
+        "remaining": max(0, config["requests"] - 1),
+        "reset": config["window"],
+    }

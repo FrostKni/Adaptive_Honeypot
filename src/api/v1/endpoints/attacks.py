@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
-from src.core.db import get_db, AttackEvent, AttackSeverity, AttackEventRepository
+from src.core.db import get_db, get_db_context, AttackEvent, AttackSeverity, AttackEventRepository
 from src.core.security import AuthContext, get_current_auth
 
 
@@ -61,7 +61,7 @@ async def list_events(
     auth: AuthContext=Depends(get_current_auth),
 ):
     """List recent attack events."""
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = AttackEventRepository(session)
         
         skip = (page - 1) * page_size

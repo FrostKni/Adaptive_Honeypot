@@ -209,8 +209,9 @@ async def get_executions(
 ):
     """Get recent decision execution history."""
     from src.ai.decision_executor import get_executor
-    
     executor = get_executor()
+    if executor is None or executor.client is None:
+        return {"executions": [], "stats": {"total": 0}}
     return {
         "executions": executor.get_execution_history(limit),
         "stats": executor.get_stats()
@@ -221,8 +222,9 @@ async def get_executions(
 async def get_execution_stats(current_user = Depends(get_current_user)):
     """Get execution statistics."""
     from src.ai.decision_executor import get_executor
-    
     executor = get_executor()
+    if executor is None or executor.client is None:
+        return {"total": 0}
     return executor.get_stats()
 
 
@@ -233,14 +235,13 @@ async def get_execution(
 ):
     """Get details of a specific execution."""
     from src.ai.decision_executor import get_executor
-    
     executor = get_executor()
+    if executor is None or executor.client is None:
+        raise HTTPException(status_code=503, detail="Docker unavailable")
     history = executor.get_execution_history(100)
-    
     for execution in history:
         if execution["id"] == execution_id:
             return execution
-    
     raise HTTPException(status_code=404, detail="Execution not found")
 
 
@@ -251,8 +252,36 @@ async def trigger_manual_action(
 ):
     """Manually trigger a decision action on a honeypot."""
     from src.ai.decision_executor import get_executor
-    
+    executor = get_executor()
+    if executor is None or executor.client is None:
+        raise HTTPException(status_code=503, detail="Docker unavailable — cannot execute actions")
+
     action_type = action.get("action")
+    honeypot_id = action.get("honeypot_id")
+    source_ip = action.get("source_ip", "manual")
+    config_changes = action.get("config_changes", {})
+
+    if action_type not in ["monitor", "reconfigure", "isolate", "switch_container"]:
+        raise HTTPException(status_code=400, detail="Invalid action type")
+
+    if not honeypot_id:
+        raise HTTPException(status_code=400, detail="honeypot_id required")
+
+    result = await executor.execute(
+        decision_id=f"manual-{int(datetime.utcnow().timestamp() * 1000)}",
+        action=action_type,
+        source_ip=source_ip,
+        honeypot_id=honeypot_id,
+        configuration_changes=config_changes,
+        threat_level="medium",
+    )
+
+    return {
+        "execution_id": result.id,
+        "status": result.status.value,
+        "error": result.error,
+        "details": result.details
+    }
     honeypot_id = action.get("honeypot_id")
     source_ip = action.get("source_ip", "manual")
     config_changes = action.get("config_changes", {})

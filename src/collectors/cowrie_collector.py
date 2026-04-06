@@ -158,8 +158,10 @@ class CowrieLogCollector:
             if not line:
                 continue
             
-            # Create a hash to track processed lines
-            line_hash = hash(line)
+            # Create a stable hash to track processed lines (hash() is
+            # process-local and not collision-safe for dedup purposes)
+            import hashlib
+            line_hash = hashlib.md5(line.encode(), usedforsecurity=False).hexdigest()
             if line_hash in self._processed_lines:
                 continue
             self._processed_lines.add(line_hash)
@@ -450,22 +452,16 @@ class CowrieLogCollector:
     async def _broadcast_event(self, **kwargs):
         """Broadcast event to WebSocket clients."""
         try:
-            # Import here to avoid circular dependency
-            from src.api.v1.endpoints.websocket import manager as ws_manager
             from src.api.v1.endpoints.websocket import broadcast_attack_event
-            
-            # Use the broadcast function which handles channel subscriptions
+
+            # broadcast_attack_event already sends to all subscribers on the
+            # "attacks" channel — do NOT also call ws_manager.broadcast() or
+            # every event would be delivered twice.
             await broadcast_attack_event(
                 honeypot_id=kwargs.get('honeypot_id', ''),
                 event=kwargs
             )
-            
-            # Also broadcast to all connections
-            await ws_manager.broadcast({
-                "type": "attack_event",
-                "data": kwargs,
-            })
-            
+
             logger.debug(f"Broadcasted {kwargs.get('event_type')} event")
         except Exception as e:
             logger.debug(f"Failed to broadcast: {e}")

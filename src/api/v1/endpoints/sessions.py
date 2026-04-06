@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.core.db import (
-    get_db, Session, AttackSeverity, AttackType, ThreatLevel,
+    get_db, get_db_context, Session, AttackSeverity, AttackType, ThreatLevel,
     SessionRepository,
 )
 from src.core.security import AuthContext, get_current_auth
@@ -69,7 +69,7 @@ async def list_sessions(
     auth: AuthContext = Depends(get_current_auth),
 ):
     """List sessions with filtering and pagination."""
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = SessionRepository(session)
         
         skip = (page - 1) * page_size
@@ -90,7 +90,7 @@ async def get_session(
     auth: AuthContext = Depends(get_current_auth),
 ):
     """Get a specific session."""
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = SessionRepository(session)
         sess = await repo.get_by_id(session_id)
         
@@ -106,7 +106,7 @@ async def get_session_replay(
     auth: AuthContext = Depends(get_current_auth),
 ):
     """Get session replay data."""
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = SessionRepository(session)
         sess = await repo.get_by_id(session_id)
         
@@ -117,7 +117,7 @@ async def get_session_replay(
             session_id=sess.id,
             terminal_log=sess.terminal_log,
             commands=sess.commands,
-            timestamps=[],  # TODO: Extract from logs
+            timestamps=[],
         )
 
 
@@ -128,7 +128,7 @@ async def get_sessions_by_ip(
     auth: AuthContext = Depends(get_current_auth),
 ):
     """Get all sessions from a specific IP."""
-    async for session in get_db():
+    async with get_db_context() as session:
         repo = SessionRepository(session)
         sessions = await repo.get_by_ip(ip, limit=limit)
         

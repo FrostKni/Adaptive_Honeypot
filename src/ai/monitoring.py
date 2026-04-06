@@ -103,7 +103,7 @@ class LocalLLMClient:
         self.base_url = base_url
         self.api_key = api_key or os.environ.get("MY_API_KEY", "local")
         self.model = "DeepSeek"
-        self.client = httpx.AsyncClient(timeout=30.0, verify=False)
+        self.client = httpx.AsyncClient(timeout=30.0)
         
     async def generate(
         self,
@@ -519,13 +519,14 @@ Always respond with valid JSON. Be concise and actionable."""
         """Determine action based on analysis."""
         threat_score = analysis.get("threat_score", 0)
         recommended = analysis.get("recommended_action", "monitor")
-        
+
+        # Honour AI recommendation when threat_score is high enough
         if threat_score >= 0.8:
-            return "isolate"
+            return recommended if recommended in ("isolate", "switch_container") else "isolate"
         elif threat_score >= 0.6:
-            return "switch_container"
+            return recommended if recommended in ("switch_container", "reconfigure") else "switch_container"
         elif threat_score >= 0.4:
-            return "reconfigure"
+            return recommended if recommended == "reconfigure" else "reconfigure"
         return "monitor"
     
     def get_status(self) -> Dict[str, Any]:

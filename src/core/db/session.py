@@ -13,14 +13,17 @@ from contextlib import asynccontextmanager
 from src.core.config import settings
 
 
-# Create async engine
+# SQLite does not support pool_size/max_overflow/pool_recycle — use NullPool
+_is_sqlite = settings.db.async_url.startswith("sqlite")
 engine = create_async_engine(
     settings.db.async_url,
     echo=settings.db.echo,
-    pool_size=settings.db.pool_size,
-    max_overflow=settings.db.max_overflow,
-    pool_pre_ping=True,
-    pool_recycle=3600,
+    **({"poolclass": NullPool} if _is_sqlite else {
+        "pool_size": settings.db.pool_size,
+        "max_overflow": settings.db.max_overflow,
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+    })
 )
 
 # Session factory
@@ -56,6 +59,8 @@ async def get_db_context():
         except Exception:
             await session.rollback()
             raise
+        finally:
+            await session.close()
 
 
 async def init_db():

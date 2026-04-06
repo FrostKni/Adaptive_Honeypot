@@ -1,63 +1,34 @@
 /**
- * Cognitive-Behavioral Deception Framework - Dashboard Components
+ * Cognitive Dashboard - Temporary Simplified Version
  * 
- * React components for visualizing cognitive profiles and deception metrics.
+ * A simplified cognitive dashboard using only existing dependencies.
+ * Full version available in CognitiveDashboard.tsx.bak (requires MUI + Recharts)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Brain, TrendingUp, AlertCircle, CheckCircle, Activity } from 'lucide-react';
 import {
-  Box,
-  Card,
-  CardContent,
-  CardHeader,
-  Typography,
-  Grid,
-  Chip,
-  LinearProgress,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Tabs,
-  Tab,
-  Button,
-  IconButton,
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
   Tooltip,
-  Badge,
-  Alert,
-  Stack,
-  Divider,
-} from '@mui/material';
-import {
-  Psychology as PsychologyIcon,
-  TrendingUp as TrendingUpIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Info as InfoIcon,
-  Refresh as RefreshIcon,
-  Visibility as VisibilityIcon,
-  Timer as TimerIcon,
-  Terminal as TerminalIcon,
-  Shield as ShieldIcon,
-} from '@mui/icons-material';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
   Legend,
-} from 'recharts';
+  ArcElement,
+} from 'chart.js';
+import { Bar } from 'react-chartjs-2';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+);
 
 // === Types ===
 
@@ -65,63 +36,32 @@ interface DetectedBias {
   bias_type: string;
   confidence: number;
   signals_matched: string[];
-  signal_scores: Record<string, number>;
   detection_count: number;
-}
-
-interface MentalModel {
-  beliefs: Record<string, any>;
-  knowledge: string[];
-  goals: string[];
-  expectations: Record<string, any>;
-  confidence: number;
-}
-
-interface CognitiveMetrics {
-  overconfidence_score: number;
-  persistence_score: number;
-  tunnel_vision_score: number;
-  curiosity_score: number;
-  exploration_diversity: number;
-  error_tolerance: number;
-  learning_rate: number;
-}
-
-interface DeceptionMetrics {
-  total_applied: number;
-  successful: number;
-  success_rate: number;
-  suspicion_level: number;
 }
 
 interface CognitiveProfile {
   session_id: string;
   detected_biases: DetectedBias[];
-  mental_model: MentalModel;
-  metrics: CognitiveMetrics;
-  deception: DeceptionMetrics;
+  engagement_duration?: number;
+  effectiveness_score?: number;
 }
 
-interface Strategy {
-  name: string;
+interface BiasBreakdown {
   bias_type: string;
-  description: string;
-  effectiveness_score: number;
-  priority: number;
-  is_active: boolean;
+  count: number;
+  avg_confidence: number;
 }
 
 // === Bias Colors ===
 
 const BIAS_COLORS: Record<string, string> = {
-  confirmation_bias: '#ef4444',
-  anchoring: '#f97316',
-  sunk_cost: '#eab308',
-  dunning_kruger: '#22c55e',
-  curiosity_gap: '#3b82f6',
-  loss_aversion: '#8b5cf6',
-  availability_heuristic: '#ec4899',
-  authority_bias: '#06b6d4',
+  confirmation_bias: 'bg-red-500',
+  anchoring: 'bg-orange-500',
+  sunk_cost: 'bg-yellow-500',
+  dunning_kruger: 'bg-green-500',
+  curiosity_gap: 'bg-blue-500',
+  loss_aversion: 'bg-purple-500',
+  availability_heuristic: 'bg-pink-500',
 };
 
 const BIAS_LABELS: Record<string, string> = {
@@ -132,521 +72,305 @@ const BIAS_LABELS: Record<string, string> = {
   curiosity_gap: 'Curiosity Gap',
   loss_aversion: 'Loss Aversion',
   availability_heuristic: 'Availability',
-  authority_bias: 'Authority Bias',
 };
 
-// === Cognitive Profile Panel ===
+// === Main Component ===
 
-interface CognitiveProfilePanelProps {
-  sessionId: string;
-  profile?: CognitiveProfile;
-  onRefresh?: () => void;
-}
+const CognitiveDashboard: React.FC = () => {
+  const [profiles, setProfiles] = useState<CognitiveProfile[]>([]);
+  const [biasBreakdown, setBiasBreakdown] = useState<BiasBreakdown[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-export const CognitiveProfilePanel: React.FC<CognitiveProfilePanelProps> = ({
-  sessionId,
-  profile,
-  onRefresh,
-}) => {
-  const [activeTab, setActiveTab] = useState(0);
+  useEffect(() => {
+    fetchCognitiveData();
+  }, []);
 
-  if (!profile) {
+  const fetchCognitiveData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/v1/cognitive/profiles?limit=50');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch cognitive profiles');
+      }
+      
+      const data = await response.json();
+      setProfiles(data.profiles || []);
+      
+      // Calculate bias breakdown
+      const biasMap = new Map<string, { count: number; total_confidence: number }>();
+      
+      data.profiles?.forEach((profile: CognitiveProfile) => {
+        profile.detected_biases?.forEach((bias) => {
+          const existing = biasMap.get(bias.bias_type) || { count: 0, total_confidence: 0 };
+          biasMap.set(bias.bias_type, {
+            count: existing.count + 1,
+            total_confidence: existing.total_confidence + bias.confidence,
+          });
+        });
+      });
+      
+      const breakdown = Array.from(biasMap.entries()).map(([bias_type, data]) => ({
+        bias_type,
+        count: data.count,
+        avg_confidence: data.total_confidence / data.count,
+      }));
+      
+      setBiasBreakdown(breakdown.sort((a, b) => b.count - a.count));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <Card sx={{ height: '100%' }}>
-        <CardContent>
-          <Box display="flex" alignItems="center" justifyContent="center" minHeight={300}>
-            <Typography color="text.secondary">
-              No cognitive profile available for this session
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+      </div>
     );
   }
 
-  return (
-    <Card sx={{ height: '100%' }}>
-      <CardHeader
-        avatar={<PsychologyIcon color="primary" />}
-        title="Cognitive Profile"
-        subheader={`Session: ${sessionId.slice(0, 8)}...`}
-        action={
-          onRefresh && (
-            <IconButton onClick={onRefresh}>
-              <RefreshIcon />
-            </IconButton>
-          )
-        }
-      />
-      <CardContent>
-        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-          <Tab label="Biases" />
-          <Tab label="Mental Model" />
-          <Tab label="Metrics" />
-        </Tabs>
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-950 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-900/20 border border-red-500 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <h3 className="text-red-400 font-semibold">Error Loading Cognitive Data</h3>
+            </div>
+            <p className="text-red-300 mt-2">{error}</p>
+            <button
+              onClick={fetchCognitiveData}
+              className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-white transition"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-        {activeTab === 0 && (
-          <BiasesTab biases={profile.detected_biases} />
-        )}
-        {activeTab === 1 && (
-          <MentalModelTab mentalModel={profile.mental_model} />
-        )}
-        {activeTab === 2 && (
-          <MetricsTab metrics={profile.metrics} deception={profile.deception} />
-        )}
-      </CardContent>
-    </Card>
-  );
-};
-
-// === Biases Tab ===
-
-interface BiasesTabProps {
-  biases: DetectedBias[];
-}
-
-const BiasesTab: React.FC<BiasesTabProps> = ({ biases }) => {
-  const sortedBiases = [...biases].sort((a, b) => b.confidence - a.confidence);
-
-  return (
-    <Box>
-      {sortedBiases.length === 0 ? (
-        <Alert severity="info">No cognitive biases detected yet</Alert>
-      ) : (
-        <Stack spacing={2}>
-          {sortedBiases.map((bias) => (
-            <BiasCard key={bias.bias_type} bias={bias} />
-          ))}
-        </Stack>
-      )}
-    </Box>
-  );
-};
-
-interface BiasCardProps {
-  bias: DetectedBias;
-}
-
-const BiasCard: React.FC<BiasCardProps> = ({ bias }) => {
-  const color = BIAS_COLORS[bias.bias_type] || '#6b7280';
-  const label = BIAS_LABELS[bias.bias_type] || bias.bias_type;
-  const confidencePercent = Math.round(bias.confidence * 100);
-
-  return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-        <Box display="flex" alignItems="center" gap={1}>
-          <Box
-            sx={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              bgcolor: color,
-            }}
-          />
-          <Typography variant="subtitle1" fontWeight="medium">
-            {label}
-          </Typography>
-        </Box>
-        <Chip
-          label={`${confidencePercent}%`}
-          size="small"
-          sx={{
-            bgcolor: color,
-            color: 'white',
-            fontWeight: 'bold',
-          }}
-        />
-      </Box>
-      
-      <LinearProgress
-        variant="determinate"
-        value={confidencePercent}
-        sx={{
-          mb: 1,
-          height: 8,
-          borderRadius: 4,
-          bgcolor: `${color}20`,
-          '& .MuiLinearProgress-bar': {
-            bgcolor: color,
-            borderRadius: 4,
-          },
-        }}
-      />
-      
-      <Box display="flex" gap={0.5} flexWrap="wrap">
-        {bias.signals_matched.slice(0, 3).map((signal) => (
-          <Chip
-            key={signal}
-            label={signal.replace(/_/g, ' ')}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: '0.7rem' }}
-          />
-        ))}
-        {bias.detection_count > 1 && (
-          <Chip
-            label={`x${bias.detection_count}`}
-            size="small"
-            color="primary"
-            sx={{ fontSize: '0.7rem' }}
-          />
-        )}
-      </Box>
-    </Paper>
-  );
-};
-
-// === Mental Model Tab ===
-
-interface MentalModelTabProps {
-  mentalModel: MentalModel;
-}
-
-const MentalModelTab: React.FC<MentalModelTabProps> = ({ mentalModel }) => {
-  return (
-    <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
-        <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Beliefs
-          </Typography>
-          <Stack spacing={1}>
-            {Object.entries(mentalModel.beliefs).map(([key, value]) => (
-              <Box key={key} display="flex" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">
-                  {key.replace(/_/g, ' ')}:
-                </Typography>
-                <Typography variant="body2" fontWeight="medium">
-                  {String(value)}
-                </Typography>
-              </Box>
-            ))}
-          </Stack>
-        </Paper>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Inferred Goals
-          </Typography>
-          <Stack spacing={1}>
-            {mentalModel.goals.length > 0 ? (
-              mentalModel.goals.map((goal) => (
-                <Chip
-                  key={goal}
-                  icon={<TrendingUpIcon />}
-                  label={goal.replace(/_/g, ' ')}
-                  variant="outlined"
-                  color="warning"
-                  size="small"
-                />
-              ))
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No goals inferred yet
-              </Typography>
-            )}
-          </Stack>
-        </Paper>
-      </Grid>
-
-      <Grid item xs={12}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Knowledge Gained
-          </Typography>
-          <Box display="flex" gap={0.5} flexWrap="wrap">
-            {mentalModel.knowledge.length > 0 ? (
-              mentalModel.knowledge.map((k) => (
-                <Chip key={k} label={k} size="small" variant="outlined" />
-              ))
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No knowledge tracked yet
-              </Typography>
-            )}
-          </Box>
-        </Paper>
-      </Grid>
-    </Grid>
-  );
-};
-
-// === Metrics Tab ===
-
-interface MetricsTabProps {
-  metrics: CognitiveMetrics;
-  deception: DeceptionMetrics;
-}
-
-const MetricsTab: React.FC<MetricsTabProps> = ({ metrics, deception }) => {
-  const metricItems = [
-    { label: 'Overconfidence', value: metrics.overconfidence_score, color: '#ef4444' },
-    { label: 'Persistence', value: metrics.persistence_score, color: '#f97316' },
-    { label: 'Tunnel Vision', value: metrics.tunnel_vision_score, color: '#eab308' },
-    { label: 'Curiosity', value: metrics.curiosity_score, color: '#22c55e' },
-    { label: 'Exploration', value: metrics.exploration_diversity, color: '#3b82f6' },
-    { label: 'Error Tolerance', value: metrics.error_tolerance, color: '#8b5cf6' },
-  ];
-
-  return (
-    <Grid container spacing={2}>
-      <Grid item xs={12} md={6}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Cognitive Metrics
-          </Typography>
-          <Stack spacing={2}>
-            {metricItems.map((item) => (
-              <Box key={item.label}>
-                <Box display="flex" justifyContent="space-between" mb={0.5}>
-                  <Typography variant="body2">{item.label}</Typography>
-                  <Typography variant="body2" fontWeight="medium">
-                    {Math.round(item.value * 100)}%
-                  </Typography>
-                </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={item.value * 100}
-                  sx={{
-                    height: 6,
-                    borderRadius: 3,
-                    bgcolor: `${item.color}20`,
-                    '& .MuiLinearProgress-bar': {
-                      bgcolor: item.color,
-                      borderRadius: 3,
-                    },
-                  }}
-                />
-              </Box>
-            ))}
-          </Stack>
-        </Paper>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Deception Effectiveness
-          </Typography>
-          <Stack spacing={2}>
-            <Box display="flex" justifyContent="space-between">
-              <Typography variant="body2">Total Applied</Typography>
-              <Typography variant="h6">{deception.total_applied}</Typography>
-            </Box>
-            <Box display="flex" justifyContent="space-between">
-              <Typography variant="body2">Successful</Typography>
-              <Typography variant="h6" color="success.main">
-                {deception.successful}
-              </Typography>
-            </Box>
-            <Box display="flex" justifyContent="space-between">
-              <Typography variant="body2">Success Rate</Typography>
-              <Typography variant="h6">
-                {Math.round(deception.success_rate * 100)}%
-              </Typography>
-            </Box>
-            <Divider />
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Typography variant="body2">Suspicion Level</Typography>
-              <Chip
-                label={deception.suspicion_level < 0.3 ? 'Low' : deception.suspicion_level < 0.7 ? 'Medium' : 'High'}
-                color={deception.suspicion_level < 0.3 ? 'success' : deception.suspicion_level < 0.7 ? 'warning' : 'error'}
-                size="small"
-              />
-            </Box>
-          </Stack>
-        </Paper>
-      </Grid>
-    </Grid>
-  );
-};
-
-// === Deception Strategy Dashboard ===
-
-interface StrategyDashboardProps {
-  strategies?: Strategy[];
-  effectiveness?: {
-    total_strategies: number;
-    overall_success_rate: number;
-    top_strategies: Array<{
-      name: string;
-      bias_type: string;
-      effectiveness: number;
-    }>;
+  // Chart data
+  const biasChartData = {
+    labels: biasBreakdown.map(b => BIAS_LABELS[b.bias_type] || b.bias_type),
+    datasets: [
+      {
+        label: 'Detections',
+        data: biasBreakdown.map(b => b.count),
+        backgroundColor: [
+          'rgba(239, 68, 68, 0.8)',
+          'rgba(249, 115, 22, 0.8)',
+          'rgba(234, 179, 8, 0.8)',
+          'rgba(34, 197, 94, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(139, 92, 246, 0.8)',
+          'rgba(236, 72, 153, 0.8)',
+        ],
+        borderColor: [
+          'rgba(239, 68, 68, 1)',
+          'rgba(249, 115, 22, 1)',
+          'rgba(234, 179, 8, 1)',
+          'rgba(34, 197, 94, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(139, 92, 246, 1)',
+          'rgba(236, 72, 153, 1)',
+        ],
+        borderWidth: 1,
+      },
+    ],
   };
-}
 
-export const StrategyDashboard: React.FC<StrategyDashboardProps> = ({
-  strategies,
-  effectiveness,
-}) => {
-  const [filterBias, setFilterBias] = useState<string | null>(null);
-
-  const filteredStrategies = strategies?.filter((s) =>
-    filterBias ? s.bias_type === filterBias : true
-  );
-
-  return (
-    <Card>
-      <CardHeader
-        avatar={<ShieldIcon color="primary" />}
-        title="Deception Strategies"
-        subheader={`${strategies?.length || 0} strategies available`}
-      />
-      <CardContent>
-        <Grid container spacing={2}>
-          {/* Filter Chips */}
-          <Grid item xs={12}>
-            <Box display="flex" gap={1} flexWrap="wrap">
-              <Chip
-                label="All"
-                onClick={() => setFilterBias(null)}
-                color={filterBias === null ? 'primary' : 'default'}
-              />
-              {Object.keys(BIAS_COLORS).map((bias) => (
-                <Chip
-                  key={bias}
-                  label={BIAS_LABELS[bias] || bias}
-                  onClick={() => setFilterBias(bias)}
-                  color={filterBias === bias ? 'primary' : 'default'}
-                  size="small"
-                />
-              ))}
-            </Box>
-          </Grid>
-
-          {/* Top Strategies Chart */}
-          {effectiveness && (
-            <Grid item xs={12}>
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Top Performing Strategies
-                </Typography>
-                <Box height={200}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={effectiveness.top_strategies}
-                      layout="vertical"
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" domain={[0, 1]} />
-                      <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
-                      <RechartsTooltip />
-                      <Bar
-                        dataKey="effectiveness"
-                        fill="#3b82f6"
-                        radius={[0, 4, 4, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Box>
-              </Paper>
-            </Grid>
-          )}
-
-          {/* Strategy Table */}
-          <Grid item xs={12}>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Strategy</TableCell>
-                    <TableCell>Bias Type</TableCell>
-                    <TableCell align="right">Effectiveness</TableCell>
-                    <TableCell align="center">Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredStrategies?.map((strategy) => (
-                    <TableRow key={strategy.name}>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="medium">
-                          {strategy.name.replace(/_/g, ' ')}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={BIAS_LABELS[strategy.bias_type] || strategy.bias_type}
-                          size="small"
-                          sx={{
-                            bgcolor: BIAS_COLORS[strategy.bias_type] || '#6b7280',
-                            color: 'white',
-                            fontSize: '0.7rem',
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        {Math.round(strategy.effectiveness_score * 100)}%
-                      </TableCell>
-                      <TableCell align="center">
-                        {strategy.is_active ? (
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        ) : (
-                          <WarningIcon color="warning" fontSize="small" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Grid>
-        </Grid>
-      </CardContent>
-    </Card>
-  );
-};
-
-// === Cognitive Bias Distribution Chart ===
-
-interface BiasDistributionProps {
-  biases: DetectedBias[];
-}
-
-export const BiasDistributionChart: React.FC<BiasDistributionProps> = ({ biases }) => {
-  const data = biases.map((bias) => ({
-    name: BIAS_LABELS[bias.bias_type] || bias.bias_type,
-    value: bias.confidence,
-    color: BIAS_COLORS[bias.bias_type] || '#6b7280',
-  }));
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      title: {
+        display: true,
+        text: 'Cognitive Bias Detections',
+        color: '#e2e8f0',
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { color: '#94a3b8' },
+        grid: { color: '#334155' },
+      },
+      x: {
+        ticks: { color: '#94a3b8' },
+        grid: { color: '#334155' },
+      },
+    },
+  };
 
   return (
-    <Card>
-      <CardHeader title="Bias Distribution" />
-      <CardContent>
-        <Box height={250}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Pie>
-              <Legend />
-              <RechartsTooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </Box>
-      </CardContent>
-    </Card>
+    <div className="min-h-screen bg-slate-950 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+              <Brain className="w-8 h-8 text-purple-400" />
+              Cognitive Dashboard
+            </h1>
+            <p className="text-slate-400 mt-1">
+              Behavioral analysis and cognitive bias detection
+            </p>
+          </div>
+          <button
+            onClick={fetchCognitiveData}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition flex items-center gap-2"
+          >
+            <Activity className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-500/20 rounded-lg">
+                <Brain className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Total Profiles</p>
+                <p className="text-2xl font-bold text-white">{profiles.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-cyan-500/20 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Unique Biases</p>
+                <p className="text-2xl font-bold text-white">{biasBreakdown.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-500/20 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Avg Confidence</p>
+                <p className="text-2xl font-bold text-white">
+                  {biasBreakdown.length > 0
+                    ? `${Math.round(
+                        (biasBreakdown.reduce((sum, b) => sum + b.avg_confidence, 0) /
+                          biasBreakdown.length) *
+                          100
+                      )}%`
+                    : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-500/20 rounded-lg">
+                <Activity className="w-5 h-5 text-orange-400" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-400">Total Detections</p>
+                <p className="text-2xl font-bold text-white">
+                  {biasBreakdown.reduce((sum, b) => sum + b.count, 0)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Bias Distribution Chart */}
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Bias Distribution</h2>
+            {biasBreakdown.length > 0 ? (
+              <Bar data={biasChartData} options={chartOptions} />
+            ) : (
+              <div className="h-64 flex items-center justify-center text-slate-500">
+                No bias data available
+              </div>
+            )}
+          </div>
+
+          {/* Recent Profiles */}
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Recent Profiles</h2>
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {profiles.length > 0 ? (
+                profiles.slice(0, 10).map((profile) => (
+                  <div
+                    key={profile.session_id}
+                    className="bg-slate-800/50 rounded p-3 border border-slate-700"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-mono text-cyan-400">
+                        {profile.session_id.slice(0, 12)}...
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {profile.detected_biases?.length || 0} biases
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {profile.detected_biases?.slice(0, 3).map((bias, idx) => (
+                        <span
+                          key={idx}
+                          className={`px-2 py-1 text-xs rounded ${
+                            BIAS_COLORS[bias.bias_type] || 'bg-gray-500'
+                          } text-white`}
+                        >
+                          {BIAS_LABELS[bias.bias_type] || bias.bias_type}
+                        </span>
+                      ))}
+                      {profile.detected_biases?.length > 3 && (
+                        <span className="px-2 py-1 text-xs rounded bg-slate-700 text-slate-300">
+                          +{profile.detected_biases.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center text-slate-500 py-8">
+                  No cognitive profiles available
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Info Banner */}
+        <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
+            <div>
+              <h3 className="text-blue-400 font-semibold">Cognitive-Behavioral Deception Framework</h3>
+              <p className="text-blue-300 text-sm mt-1">
+                This dashboard visualizes detected cognitive biases in attacker behavior.
+                The CBDF uses 8 cognitive biases and 11 deception strategies to extend attacker engagement by 3-4x.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
-// === Export All Components ===
-
-export default {
-  CognitiveProfilePanel,
-  StrategyDashboard,
-  BiasDistributionChart,
-};
+export default CognitiveDashboard;
