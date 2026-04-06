@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-
-const API_BASE_URL = '/api/v1'
+import { getApiUrl } from '../config/env'
+import { toast } from '../stores/toastStore'
 
 // Helper to get auth token
 function getAuthToken(): string | null {
@@ -87,7 +87,7 @@ async function apiRequest<T>(
 ): Promise<T> {
   const token = getAuthToken()
   
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(getApiUrl(`/api/v1${endpoint}`), {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -150,8 +150,9 @@ export function useCreateHoneypot() {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.honeypots })
+      toast.success('Honeypot Created', `${data.name} is now being deployed`)
     },
   })
 }
@@ -164,6 +165,7 @@ export function useDeleteHoneypot() {
       apiRequest(`/honeypots/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.honeypots })
+      toast.success('Honeypot Removed', 'The honeypot has been deleted')
     },
   })
 }

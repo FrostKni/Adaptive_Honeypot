@@ -9,6 +9,9 @@ import Settings from './pages/Settings'
 import AIMonitor from './pages/AIMonitor'
 import CognitiveDashboard from './pages/CognitiveDashboard'
 import Login from './pages/Login'
+import ErrorBoundary from './components/ErrorBoundary'
+import ToastContainer from './components/ToastContainer'
+import { toast } from './stores/toastStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,6 +19,12 @@ const queryClient = new QueryClient({
       staleTime: 5000,
       retry: 2,
       refetchOnWindowFocus: true,
+    },
+    mutations: {
+      onError: (error: unknown) => {
+        const message = error instanceof Error ? error.message : 'An unexpected error occurred'
+        toast.error('Operation Failed', message)
+      },
     },
   },
 })
@@ -113,13 +122,16 @@ function AppRoutes() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <AppRoutes />
-        </Router>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <AppRoutes />
+          </Router>
+          <ToastContainer />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }
 

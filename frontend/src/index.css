@@ -41,6 +41,68 @@
   --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
+/* Light Theme */
+:root.light,
+.light {
+  --bg-deep: #f8fafc;
+  --bg-base: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-surface: rgba(15, 23, 42, 0.03);
+  
+  --accent-primary: #0891b2;
+  --accent-secondary: #7c3aed;
+  --accent-success: #059669;
+  --accent-warning: #d97706;
+  --accent-danger: #dc2626;
+  --accent-info: #2563eb;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  --border-subtle: rgba(15, 23, 42, 0.06);
+  --border-default: rgba(15, 23, 42, 0.1);
+  --border-glow: rgba(8, 145, 178, 0.3);
+  
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  
+  --shadow-glow: 0 0 20px rgba(8, 145, 178, 0.1);
+  --shadow-glow-intense: 0 0 40px rgba(8, 145, 178, 0.15);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Dark Theme (default) */
+:root.dark,
+.dark {
+  --bg-deep: #020204;
+  --bg-base: #0a0a0f;
+  --bg-elevated: #12121a;
+  --bg-surface: rgba(255, 255, 255, 0.03);
+  
+  --accent-primary: #00d4ff;
+  --accent-secondary: #8b5cf6;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+  --accent-info: #3b82f6;
+  
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-glow: rgba(0, 212, 255, 0.3);
+  
+  --glass-bg: rgba(10, 10, 15, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  
+  --shadow-glow: 0 0 20px rgba(0, 212, 255, 0.15);
+  --shadow-glow-intense: 0 0 40px rgba(0, 212, 255, 0.25);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
 /* Base Reset */
 *, *::before, *::after {
   margin: 0;
@@ -406,6 +468,20 @@ body {
     background: rgba(16, 185, 129, 0.1);
     color: #34d399;
     border-color: rgba(16, 185, 129, 0.2);
+  }
+
+  .badge-active {
+    @apply badge;
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+
+  .badge-inactive {
+    @apply badge;
+    background: rgba(100, 116, 139, 0.1);
+    color: #94a3b8;
+    border-color: rgba(100, 116, 139, 0.2);
   }
 }
 

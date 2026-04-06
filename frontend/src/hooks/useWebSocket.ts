@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { getWsUrl } from '../config/env'
 
 interface UseWebSocketOptions {
   onMessage?: (data: unknown) => void
@@ -31,8 +32,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     }
     
     try {
-      // Connect directly to backend to avoid VPN/proxy issues
-      const wsUrl = 'ws://127.0.0.1:8000/api/v1/ws'
+      // Use environment config for WebSocket URL
+      const wsUrl = getWsUrl('/api/v1/ws')
       
       const ws = new WebSocket(wsUrl)
       

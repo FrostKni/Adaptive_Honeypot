@@ -198,10 +198,13 @@ async def get_current_auth(
     if credentials:
         token_data = decode_token(credentials.credentials)
         if token_data:
+            # Check if user has admin scope
+            is_admin = "admin" in (token_data.scopes or [])
             return AuthContext(
                 subject=token_data.sub,
                 auth_type="jwt",
                 scopes=token_data.scopes,
+                is_admin=is_admin,
             )
 
     # Try API key

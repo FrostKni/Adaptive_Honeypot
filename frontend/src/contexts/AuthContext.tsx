@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { getApiUrl } from '../config/env'
+import { toast } from '../stores/toastStore'
 
 interface User {
   subject: string
@@ -26,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check if we have a token and validate it
     const storedToken = localStorage.getItem('token')
     if (storedToken) {
-      fetch('/api/v1/auth/me', {
+      fetch(getApiUrl('/api/v1/auth/me'), {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }
@@ -52,30 +54,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      const res = await fetch('/api/v1/auth/login', {
+      const res = await fetch(getApiUrl('/api/v1/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       })
 
-      if (!res.ok) return false
+      if (!res.ok) {
+        toast.error('Login Failed', 'Invalid username or password')
+        return false
+      }
 
       const data = await res.json()
       localStorage.setItem('token', data.access_token)
       setToken(data.access_token)
 
       // Fetch user info
-      const userRes = await fetch('/api/v1/auth/me', {
+      const userRes = await fetch(getApiUrl('/api/v1/auth/me'), {
         headers: { 'Authorization': `Bearer ${data.access_token}` }
       })
       
       if (userRes.ok) {
         const userData = await userRes.json()
         setUser(userData)
+        toast.success('Welcome back!', `Logged in as ${userData.subject || 'Admin'}`)
+        return true
+      } else {
+        // If /auth/me fails, still consider login successful since we have a token
+        // The user can still access protected routes
+        console.error('Failed to fetch user info, but login was successful')
+        setUser({ subject: username, auth_type: 'jwt', scopes: [], is_admin: true })
+        toast.success('Welcome back!', `Logged in as ${username}`)
+        return true
       }
-
-      return true
-    } catch {
+    } catch (error) {
+      console.error('Login error:', error)
+      toast.error('Connection Error', 'Unable to connect to the server')
       return false
     }
   }
@@ -84,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token')
     setToken(null)
     setUser(null)
+    toast.info('Signed Out', 'You have been logged out successfully')
   }
 
   return (
