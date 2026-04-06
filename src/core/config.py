@@ -23,14 +23,38 @@ class DatabaseSettings(BaseSettings):
     max_overflow: int = 20
     echo: bool = False
 
+    # Database type - "sqlite" or "postgres"
+    type: str = "sqlite"
+
     @property
     def async_url(self) -> str:
-        # Default to SQLite for local development
-        return f"sqlite+aiosqlite:///./honeypot.db"
+        """Construct async database URL."""
+        if (
+            self.type == "postgres"
+            or self.host != "localhost"
+            or self.name != "adaptive_honeypot"
+        ):
+            # Use PostgreSQL with asyncpg driver
+            password = self.password.get_secret_value()
+            return f"postgresql+asyncpg://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
+        else:
+            # Default to SQLite for local development
+            return "sqlite+aiosqlite:///./honeypot.db"
 
     @property
     def sync_url(self) -> str:
-        return f"sqlite:///./honeypot.db"
+        """Construct sync database URL."""
+        if (
+            self.type == "postgres"
+            or self.host != "localhost"
+            or self.name != "adaptive_honeypot"
+        ):
+            # Use PostgreSQL with psycopg2 driver
+            password = self.password.get_secret_value()
+            return f"postgresql+psycopg2://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
+        else:
+            # Default to SQLite for local development
+            return "sqlite:///./honeypot.db"
 
 
 class RedisSettings(BaseSettings):
