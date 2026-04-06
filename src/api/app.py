@@ -67,7 +67,12 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
     """Global error handling middleware."""
 
     async def dispatch(self, request: Request, call_next):
-        from src.core.exceptions import HoneypotError, RateLimitError
+        from src.core.exceptions import (
+            HoneypotError,
+            RateLimitError,
+            AuthenticationError,
+            ConfigurationError,
+        )
 
         try:
             return await call_next(request)
@@ -78,15 +83,22 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
                 content=exc.to_dict(),
                 headers={"Retry-After": str(exc.retry_after)},
             )
+        except AuthenticationError as exc:
+            logger.error(f"Authentication error: {exc}")
+            return JSONResponse(
+                status_code=401,
+                content=exc.to_dict(),
+            )
+        except ConfigurationError as exc:
+            logger.error(f"Configuration error: {exc}")
+            return JSONResponse(
+                status_code=500,
+                content=exc.to_dict(),
+            )
         except HoneypotError as exc:
             logger.error(f"Application error: {exc}")
-            status_code = 500
-            if "AUTHENTICATION" in exc.code:
-                status_code = 401
-            elif "CONFIGURATION" in exc.code:
-                status_code = 500
             return JSONResponse(
-                status_code=status_code,
+                status_code=500,
                 content=exc.to_dict(),
             )
         except Exception as exc:
