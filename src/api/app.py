@@ -119,10 +119,19 @@ class ErrorHandlingMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI) -> AsyncGenerator:
     """Application lifespan manager."""
     import asyncio
+    from src.core.config import validate_production_secrets
 
     # Startup
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
     logger.info(f"Environment: {settings.environment}")
+
+    # Validate production secrets
+    try:
+        validate_production_secrets(settings)
+        logger.info("Secret validation passed")
+    except Exception as e:
+        logger.error(f"Secret validation failed: {e}")
+        raise
 
     # Initialize database
     try:
