@@ -10,6 +10,7 @@ def test_database_url_uses_environment_variable():
     with patch.dict(
         "os.environ",
         {
+            "DB_TYPE": "postgres",
             "DB_HOST": "postgres-server",
             "DB_PORT": "5432",
             "DB_USER": "testuser",
@@ -41,6 +42,7 @@ def test_database_url_postgres_async():
     with patch.dict(
         "os.environ",
         {
+            "DB_TYPE": "postgres",
             "DB_HOST": "localhost",
             "DB_USER": "user",
             "DB_PASSWORD": "pass",
@@ -59,6 +61,7 @@ def test_database_url_sync():
     with patch.dict(
         "os.environ",
         {
+            "DB_TYPE": "postgres",
             "DB_HOST": "localhost",
             "DB_USER": "user",
             "DB_PASSWORD": "pass",
@@ -70,3 +73,27 @@ def test_database_url_sync():
             "postgresql+psycopg2" in db_settings.sync_url
             or "postgres+psycopg2" in db_settings.sync_url
         )
+
+
+def test_database_type_explicitly_set_to_postgres():
+    """Explicit type=postgres should use PostgreSQL even with defaults."""
+    with patch.dict("os.environ", {"DB_TYPE": "postgres"}):
+        db_settings = DatabaseSettings()
+        assert "postgresql" in db_settings.async_url
+
+
+def test_password_with_special_characters():
+    """Password with special chars should be URL-encoded."""
+    with patch.dict(
+        "os.environ", {"DB_PASSWORD": "p@ss:word/123", "DB_TYPE": "postgres"}
+    ):
+        db_settings = DatabaseSettings()
+        # Should be encoded
+        assert "p%40ss%3Aword%2F123" in db_settings.async_url
+
+
+def test_invalid_database_type():
+    """Invalid database type should raise validation error."""
+    with patch.dict("os.environ", {"DB_TYPE": "mysql"}):
+        with pytest.raises(Exception):  # Pydantic ValidationError
+            DatabaseSettings()

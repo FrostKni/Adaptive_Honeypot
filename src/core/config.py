@@ -4,6 +4,7 @@ Supports environment variables, .env files, and validation.
 """
 
 from typing import Optional, List, Literal
+from urllib.parse import quote_plus
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
@@ -24,36 +25,34 @@ class DatabaseSettings(BaseSettings):
     echo: bool = False
 
     # Database type - "sqlite" or "postgres"
-    type: str = "sqlite"
+    type: Literal["sqlite", "postgres"] = "sqlite"
 
     @property
     def async_url(self) -> str:
         """Construct async database URL."""
-        if (
-            self.type == "postgres"
-            or self.host != "localhost"
-            or self.name != "adaptive_honeypot"
-        ):
+        if self.type == "postgres":
             # Use PostgreSQL with asyncpg driver
-            password = self.password.get_secret_value()
-            return f"postgresql+asyncpg://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
+            password = quote_plus(self.password.get_secret_value())
+            user = quote_plus(self.user)
+            host = quote_plus(self.host)
+            name = quote_plus(self.name)
+            return f"postgresql+asyncpg://{user}:{password}@{host}:{self.port}/{name}"
         else:
-            # Default to SQLite for local development
+            # SQLite for development
             return "sqlite+aiosqlite:///./honeypot.db"
 
     @property
     def sync_url(self) -> str:
         """Construct sync database URL."""
-        if (
-            self.type == "postgres"
-            or self.host != "localhost"
-            or self.name != "adaptive_honeypot"
-        ):
+        if self.type == "postgres":
             # Use PostgreSQL with psycopg2 driver
-            password = self.password.get_secret_value()
-            return f"postgresql+psycopg2://{self.user}:{password}@{self.host}:{self.port}/{self.name}"
+            password = quote_plus(self.password.get_secret_value())
+            user = quote_plus(self.user)
+            host = quote_plus(self.host)
+            name = quote_plus(self.name)
+            return f"postgresql+psycopg2://{user}:{password}@{host}:{self.port}/{name}"
         else:
-            # Default to SQLite for local development
+            # SQLite for development
             return "sqlite:///./honeypot.db"
 
 
