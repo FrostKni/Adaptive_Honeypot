@@ -79,7 +79,7 @@ Multi-provider AI with automatic fallback:
 - OpenAI GPT-4
 - Anthropic Claude
 - Google Gemini
-- Local LLM (DeepSeek)
+- Local LLM (GLM5)
 - Rule-based fallback
 
 ### 3. Production-Ready Architecture
@@ -204,7 +204,7 @@ Multi-provider AI with automatic fallback:
 - OpenAI API
 - Anthropic API
 - Google Generative AI
-- Local LLM (DeepSeek)
+- Local LLM (GLM5)
 
 ### Infrastructure
 - Docker Compose

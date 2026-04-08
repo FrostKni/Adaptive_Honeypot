@@ -108,7 +108,7 @@
 - OpenAI GPT-4 (primary)
 - Anthropic Claude (fallback)
 - Google Gemini (fallback)
-- Local LLM - DeepSeek (always available)
+- Local LLM - GLM5 (always available)
 - Rule-based (emergency fallback)
 
 **Capabilities**:
@@ -217,7 +217,7 @@
 
 ### AI/ML
 - OpenAI, Anthropic, Google APIs
-- Local LLM (DeepSeek)
+- Local LLM (GLM5)
 - Prompt engineering framework
 
 ### Infrastructure

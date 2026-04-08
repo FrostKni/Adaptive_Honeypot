@@ -95,15 +95,24 @@ async def broadcast_new_attack(attack_data: dict):
 
 
 async def broadcast_ai_decision(decision_data: dict):
-    """Broadcast AI decision for notifications."""
+    """Broadcast AI decision for notifications.
+    
+    Broadcasts to both:
+    1. General WebSocket clients (type: ai_decision)
+    2. AI monitoring channel (for AI Monitor page)
+    """
     if _manager:
-        await _manager.broadcast(
-            {
-                "type": "ai_decision",
-                "data": decision_data,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-        )
+        message = {
+            "type": "ai_decision",
+            "data": decision_data,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        
+        # Broadcast to general connections
+        await _manager.broadcast(message)
+        
+        # Also broadcast to AI monitoring channel
+        await _manager.broadcast(message, channel="ai")
 
 
 async def broadcast_security_alert(alert_data: dict):

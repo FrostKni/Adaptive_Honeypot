@@ -1,7 +1,31 @@
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { memo, useEffect, useState, useMemo } from 'react'
+import { memo, useEffect, useState, useMemo, useRef } from 'react'
 import type { AttackLocation } from '../../types'
+
+// Component to update map center dynamically
+// Only updates when center actually changes and is valid
+function MapCenterUpdater({ center }: { center: [number, number] }) {
+  const map = useMap()
+  const prevCenterRef = useRef<[number, number] | null>(null)
+  
+  useEffect(() => {
+    // Only update if center is valid and has actually changed
+    if (center[0] !== 0 || center[1] !== 0) {
+      const prevCenter = prevCenterRef.current
+      const hasChanged = !prevCenter || 
+        prevCenter[0] !== center[0] || 
+        prevCenter[1] !== center[1]
+      
+      if (hasChanged) {
+        map.setView(center, map.getZoom())
+        prevCenterRef.current = center
+      }
+    }
+  }, [center, map])
+  
+  return null
+}
 
 interface AttackMapProps {
   attacks: AttackLocation[]
@@ -56,14 +80,70 @@ const severityConfig: Record<string, {
   },
 }
 
-// Server/Honeypot location
-const SERVER_LOCATION: [number, number] = [20, 0]
+// Server location interface
+interface ServerLocation {
+  ip: string
+  city: string
+  country: string
+  country_code: string
+  region: string
+  lat: number
+  lng: number
+  isp: string
+  timezone: string
+}
 
 function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
   const [isMounted, setIsMounted] = useState(false)
+  const [serverLocation, setServerLocation] = useState<[number, number] | null>(null) // null until we have valid coordinates
+  const [serverInfo, setServerInfo] = useState<ServerLocation | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     setIsMounted(true)
+    
+    // Fetch server location with auth token
+    const fetchServerLocation = async () => {
+      try {
+        // Get auth token from localStorage
+        const token = localStorage.getItem('token')
+        if (!token) {
+          console.warn('[AttackMap] No auth token found, using default location')
+          setServerLocation([20, 0])
+          setIsLoading(false)
+          return
+        }
+        
+        console.log('[AttackMap] Fetching server location with auth token...')
+        
+        const response = await fetch('/api/v1/analytics/server-location', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        if (response.ok) {
+          const data: ServerLocation = await response.json()
+          console.log('[AttackMap] Server location fetched successfully:', data.city, data.country, [data.lat, data.lng])
+          setServerLocation([data.lat, data.lng])
+          setServerInfo(data)
+        } else {
+          console.error('[AttackMap] Failed to fetch server location:', response.status, response.statusText)
+          // Fallback to a reasonable default location
+          setServerLocation([20, 0])
+        }
+      } catch (error) {
+        console.error('[AttackMap] Failed to fetch server location:', error)
+        // Fallback to a reasonable default location
+        setServerLocation([20, 0])
+      } finally {
+        setIsLoading(false)
+        console.log('[AttackMap] Loading complete, map will render')
+      }
+    }
+    
+    fetchServerLocation()
+    
     return () => setIsMounted(false)
   }, [])
 
@@ -84,7 +164,11 @@ function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
     return { total, topAttackers }
   }, [attacks])
 
-  if (!isMounted) {
+  // Check if we have valid coordinates (not null and not [0, 0])
+  const hasValidLocation = serverLocation !== null && 
+    (serverLocation[0] !== 0 || serverLocation[1] !== 0)
+
+  if (!isMounted || isLoading || !hasValidLocation) {
     return (
       <div 
         className="h-full w-full flex items-center justify-center"
@@ -105,7 +189,7 @@ function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
             className="text-sm font-mono"
             style={{ color: THEME.textSecondary }}
           >
-            INITIALIZING THREAT MAP...
+            {isLoading ? 'DETECTING SERVER LOCATION...' : 'INITIALIZING THREAT MAP...'}
           </span>
         </div>
       </div>
@@ -212,7 +296,7 @@ function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
       `}</style>
 
       <MapContainer
-        center={SERVER_LOCATION}
+        center={serverLocation!}
         zoom={2}
         minZoom={2}
         maxZoom={16}
@@ -229,9 +313,12 @@ function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
           noWrap={true}
         />
         
+        {/* Update map center when server location is fetched */}
+        <MapCenterUpdater center={serverLocation!} />
+        
         {/* Server/Honeypot marker - cyan pulsing dot */}
         <CircleMarker
-          center={SERVER_LOCATION}
+          center={serverLocation!}
           radius={10}
           pathOptions={{
             fillColor: THEME.accentPrimary,
@@ -242,7 +329,7 @@ function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
           }}
         >
           <Popup>
-            <div className="min-w-[160px] p-3 font-mono">
+            <div className="min-w-[180px] p-3 font-mono">
               <div 
                 className="font-bold text-sm mb-2"
                 style={{ color: THEME.accentPrimary }}
@@ -258,6 +345,18 @@ function AttackMapInner({ attacks, onLocationClick }: AttackMapProps) {
                   <span>Mode:</span>
                   <span style={{ color: THEME.accentPrimary }}>ADAPTIVE</span>
                 </div>
+                {serverInfo && (
+                  <>
+                    <div className="flex justify-between mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                      <span>Location:</span>
+                      <span style={{ color: THEME.textPrimary }}>{serverInfo.city}, {serverInfo.country}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>ISP:</span>
+                      <span style={{ color: THEME.textPrimary }} className="truncate max-w-[100px]">{serverInfo.isp}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </Popup>

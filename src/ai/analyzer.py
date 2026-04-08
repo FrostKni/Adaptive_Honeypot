@@ -130,6 +130,13 @@ class EnhancedAIAnalyzer:
                     model=settings.ai.model,
                     api_key=settings.ai.gemini_api_key.get_secret_value() if settings.ai.gemini_api_key else None,
                 )
+            elif provider == "custom":
+                return create_provider(
+                    "custom",
+                    model=settings.ai.model,
+                    api_key=settings.ai.custom_api_key.get_secret_value() if settings.ai.custom_api_key else None,
+                    base_url=settings.ai.base_url,
+                )
         except Exception as e:
             logger.error(f"Failed to initialize {provider} provider: {e}")
         return None
@@ -138,6 +145,7 @@ class EnhancedAIAnalyzer:
         self,
         events: List[Dict[str, Any]],
         context: Optional[Dict[str, Any]] = None,
+        thought_callback: Optional[callable] = None,
     ) -> AIAnalysisResult:
         """
         Analyze attack events using AI.
@@ -145,6 +153,7 @@ class EnhancedAIAnalyzer:
         Args:
             events: List of attack events
             context: Additional context (honeypot config, history, etc.)
+            thought_callback: Optional async callback for streaming thoughts (chunk, full_content)
         
         Returns:
             AIAnalysisResult with structured analysis
@@ -152,11 +161,11 @@ class EnhancedAIAnalyzer:
         # Prepare attack summary
         summary = self._prepare_attack_summary(events)
         
-        # Check cache
+        # Check cache (skip cache if streaming - we want live thoughts)
         cache_key = self.cache._hash_key(json.dumps(summary, sort_keys=True))
         cached = self.cache.get(cache_key)
         
-        if cached:
+        if cached and not thought_callback:
             logger.info("Using cached analysis result")
             return AIAnalysisResult(**json.loads(cached.content))
         
@@ -169,7 +178,7 @@ class EnhancedAIAnalyzer:
             if provider and provider.is_available():
                 try:
                     response = await self._analyze_with_provider(
-                        provider, summary, context
+                        provider, summary, context, thought_callback
                     )
                     
                     # Parse and validate result
@@ -194,8 +203,16 @@ class EnhancedAIAnalyzer:
         provider: AIProviderInterface,
         summary: Dict[str, Any],
         context: Optional[Dict[str, Any]],
+        thought_callback: Optional[callable] = None,
     ) -> AIResponse:
-        """Perform analysis with a specific provider."""
+        """Perform analysis with a specific provider.
+        
+        Args:
+            provider: AI provider to use
+            summary: Attack summary dict
+            context: Additional context
+            thought_callback: Optional async callback for streaming thoughts
+        """
         prompt = ATTACK_ANALYSIS_PROMPT.format(
             attack_summary=json.dumps(summary, indent=2),
             schema=json.dumps(ATTACK_ANALYSIS_SCHEMA, indent=2),
@@ -205,6 +222,12 @@ class EnhancedAIAnalyzer:
 Provide detailed, actionable analysis that helps optimize honeypot effectiveness.
 Always respond with valid JSON matching the requested schema."""
         
+        # Use streaming if callback provided and provider supports it
+        if thought_callback and hasattr(provider, 'generate_stream'):
+            return await self._analyze_with_streaming(
+                provider, prompt, system_prompt, thought_callback
+            )
+        
         return await provider.generate(
             prompt=prompt,
             system_prompt=system_prompt,
@@ -212,6 +235,50 @@ Always respond with valid JSON matching the requested schema."""
             max_tokens=settings.ai.max_tokens,
             json_mode=True,
         )
+    
+    async def _analyze_with_streaming(
+        self,
+        provider: AIProviderInterface,
+        prompt: str,
+        system_prompt: str,
+        thought_callback: callable,
+    ) -> AIResponse:
+        """Perform streaming analysis, calling thought_callback for each chunk."""
+        import time
+        start = time.time()
+        
+        full_content = ""
+        tokens_used = 0
+        
+        try:
+            async for chunk in provider.generate_stream(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=settings.ai.temperature,
+                max_tokens=settings.ai.max_tokens,
+            ):
+                full_content += chunk
+                tokens_used += 1
+                
+                # Call the thought callback with the accumulated content
+                if thought_callback:
+                    try:
+                        await thought_callback(chunk, full_content)
+                    except Exception as e:
+                        logger.debug(f"Thought callback error: {e}")
+            
+            duration_ms = int((time.time() - start) * 1000)
+            
+            return AIResponse(
+                content=full_content,
+                provider=provider.__class__.__name__.replace('Provider', '').lower(),
+                model=getattr(provider, 'model', 'unknown'),
+                tokens_used=tokens_used,
+                duration_ms=duration_ms,
+            )
+        except Exception as e:
+            logger.error(f"Streaming analysis failed: {e}")
+            raise
     
     def _prepare_attack_summary(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Prepare attack summary for AI analysis."""
@@ -292,6 +359,7 @@ Always respond with valid JSON matching the requested schema."""
             )
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI response: {e}")
+            logger.debug(f"Raw response content (first 500 chars): {content[:500] if content else 'empty'}")
             # Return default result
             return AIAnalysisResult(
                 attack_sophistication="medium",

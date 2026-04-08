@@ -405,12 +405,96 @@ class GeminiProvider(AIProviderInterface):
 # ==================== Provider Factory ====================
 
 
+class CustomOpenAIProvider(AIProviderInterface):
+    """OpenAI-compatible provider with custom base_url (e.g. DeepSeek, Ollama, Together, etc)."""
+
+    def __init__(self, model: str, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        super().__init__(model, api_key)
+        if api_key and base_url:
+            try:
+                from openai import AsyncOpenAI
+                self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+                self._base_url = base_url
+            except ImportError:
+                logger.warning("OpenAI library not installed — cannot use custom provider")
+
+    def is_available(self) -> bool:
+        return self.client is not None
+
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 2000,
+        json_mode: bool = True,
+    ) -> AIResponse:
+        import time
+        start = time.time()
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        # Only add json_mode if the endpoint supports it (skip for local models)
+        if json_mode:
+            try:
+                response = await self.client.chat.completions.create(
+                    **kwargs, response_format={"type": "json_object"}
+                )
+            except Exception:
+                # Fallback without json_mode if endpoint doesn't support it
+                response = await self.client.chat.completions.create(**kwargs)
+        else:
+            response = await self.client.chat.completions.create(**kwargs)
+
+        content = response.choices[0].message.content or ""
+        return AIResponse(
+            content=content,
+            provider="custom",
+            model=self.model,
+            tokens_used=response.usage.total_tokens if response.usage else 0,
+            duration_ms=int((time.time() - start) * 1000),
+        )
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 2000,
+    ) -> AsyncGenerator[str, None]:
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        stream = await self.client.chat.completions.create(
+            model=self.model, messages=messages,
+            temperature=temperature, max_tokens=max_tokens, stream=True,
+        )
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+
 def create_provider(
     provider: str,
     model: Optional[str] = None,
     api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> AIProviderInterface:
     """Create an AI provider instance."""
+    if provider == "custom":
+        return CustomOpenAIProvider(model=model, api_key=api_key, base_url=base_url)
+
     providers = {
         "openai": OpenAIProvider,
         "anthropic": AnthropicProvider,

@@ -569,7 +569,7 @@ class ThesisGenerator:
             "OpenAI GPT-4 Turbo: Primary provider for complex analysis tasks",
             "Anthropic Claude 3: Secondary provider with strong reasoning capabilities",
             "Google Gemini Pro: Tertiary provider for cost-effective processing",
-            "Local models (DeepSeek): Fallback option ensuring guaranteed availability"
+            "Local models (GLM5): Fallback option ensuring guaranteed availability"
         ])
         
         self.add_paragraph("""The cognitive-behavioral framework focuses on seven primary cognitive biases selected for their documented effectiveness in deception contexts and detectability in command-line behavior:""")

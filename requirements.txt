@@ -28,9 +28,12 @@ python-dotenv==1.0.0
 # HTTP Client
 httpx==0.25.2
 aiohttp==3.9.1
+requests<2.32,>=2.26.0  # Required for docker SDK compatibility
 
 # Container Management
 docker==7.0.0
+# Note: requests<2.32 is required for docker SDK compatibility
+# The docker SDK 7.x has issues with requests>=2.32 due to URL scheme handling
 
 # WebSocket
 websockets==12.0

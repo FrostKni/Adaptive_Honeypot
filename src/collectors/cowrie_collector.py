@@ -14,7 +14,6 @@ from uuid import uuid4
 import docker
 from docker.errors import DockerException
 
-from src.core.db import get_db
 from src.core.db.models import Session, AttackEvent, AttackSeverity, AttackType, ThreatLevel
 from src.collectors.cognitive_bridge import (
     get_cognitive_bridge,
@@ -362,7 +361,8 @@ class CowrieLogCollector:
         timestamp: datetime,
     ):
         """Create a new session record."""
-        async for session in get_db():
+        from src.core.db.session import get_db_context
+        async with get_db_context() as session:
             try:
                 new_session = Session(
                     id=session_id,
@@ -377,7 +377,6 @@ class CowrieLogCollector:
                     started_at=timestamp,
                     commands=[],
                 )
-                
                 session.add(new_session)
                 await session.commit()
                 logger.info(f"Created session {session_id} from {source_ip}")
@@ -405,24 +404,23 @@ class CowrieLogCollector:
             "high": AttackSeverity.HIGH,
             "critical": AttackSeverity.CRITICAL,
         }
-        
-        async for session in get_db():
+
+        from src.core.db.session import get_db_context
+        async with get_db_context() as session:
             try:
                 event = AttackEvent(
-                    session_id=session_id,  # Use actual session_id or None
+                    session_id=session_id,
                     event_type=event_type,
                     timestamp=timestamp,
                     data={"source_ip": source_ip, **data},
                     severity=severity_map.get(severity, AttackSeverity.INFO),
                     tags=[event_type, "cowrie", honeypot_name],
                 )
-                
                 session.add(event)
                 await session.commit()
-                
+
                 logger.info(f"Event: {event_type} from {source_ip} on {honeypot_name}")
-                
-                # Send to AI service for analysis
+
                 await self._send_to_ai(
                     honeypot_id=honeypot_id,
                     honeypot_name=honeypot_name,
@@ -432,8 +430,7 @@ class CowrieLogCollector:
                     timestamp=timestamp,
                     data=data,
                 )
-                
-                # Broadcast via WebSocket (always)
+
                 await self._broadcast_event(
                     honeypot_id=honeypot_id,
                     honeypot_name=honeypot_name,
@@ -444,7 +441,7 @@ class CowrieLogCollector:
                     timestamp=timestamp.isoformat() if timestamp else None,
                     data=data,
                 )
-                    
+
             except Exception as e:
                 logger.error(f"Failed to create event: {e}")
                 await session.rollback()

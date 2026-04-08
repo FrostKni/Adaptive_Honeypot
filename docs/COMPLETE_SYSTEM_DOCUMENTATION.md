@@ -124,7 +124,7 @@ Real-time log ingestion from Docker containers:
 Central AI orchestration:
 
 - **Event Queue:** Processes attack events asynchronously
-- **LLM Client:** Connects to local DeepSeek or external providers
+- **LLM Client:** Connects to local GLM5 or external providers
 - **Decision Engine:** Generates threat assessments and actions
 - **Activity Tracking:** Maintains history of AI decisions
 
@@ -264,7 +264,7 @@ The system integrates with local LLM via `api.ai.oac`:
 ```python
 class LocalLLMClient:
     base_url = "https://api.ai.oac/v1"
-    model = "DeepSeek"
+    model = "GLM5"
     
     async def generate(prompt, system_prompt, temperature, max_tokens):
         # Returns structured analysis

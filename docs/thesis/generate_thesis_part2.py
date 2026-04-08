@@ -351,7 +351,7 @@ The system supports multiple AI providers:
 | OpenAI        | GPT-4 Turbo            | Strong reasoning, structured output |
 | Anthropic     | Claude 3 Opus          | Long context, nuanced analysis     |
 | Google        | Gemini Pro             | Fast response, good availability   |
-| Local (DeepSeek)| DeepSeek-V3        | Privacy, no latency from API calls |
+| Local (GLM5)| GLM5-V3        | Privacy, no latency from API calls |
 
 The provider manager implements health checking, automatic failover, and response validation across all providers.
 
@@ -375,7 +375,7 @@ Decisions are validated through rule-based sanity checks before execution.
                 ["OpenAI", "GPT-4 Turbo", "2.3s", "$0.01", "Complex analysis"],
                 ["Anthropic", "Claude 3 Opus", "3.1s", "$0.015", "Detailed reasoning"],
                 ["Google", "Gemini Pro", "1.5s", "$0.001", "Fast classification"],
-                ["Local", "DeepSeek-V3", "0.8s", "$0.00", "High-volume processing"],
+                ["Local", "GLM5-V3", "0.8s", "$0.00", "High-volume processing"],
             ],
             "AI Provider Comparison",
             "Comparison of supported AI providers showing latency, cost, and recommended use cases for honeypot analysis tasks."
@@ -1144,7 +1144,7 @@ Provider implementations exist for:
 - OpenAI (GPT-4, GPT-3.5)
 - Anthropic (Claude 3 family)
 - Google (Gemini Pro)
-- Local (DeepSeek via api.ai.oac)
+- Local (GLM5 via api.ai.oac)
 
 Fallback Chain:
 

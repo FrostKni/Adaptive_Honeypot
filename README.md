@@ -54,7 +54,7 @@ The Adaptive Honeypot System deploys and manages decoy services (SSH, HTTP, FTP,
 ┌──────────▼──────────┐    ┌────────────▼──────────────────────┐
 │  AIMonitoringService │    │    CognitiveIntegrationBridge      │
 │  (LocalLLMClient /  │    │  (routes commands to CBDF engine)  │
-│   DeepSeek)         │    └────────────┬──────────────────────┘
+│   GLM5)         │    └────────────┬──────────────────────┘
 └──────────┬──────────┘                 │
            │ recommended_action         │ CognitiveProfile
 ┌──────────▼──────────┐    ┌────────────▼──────────────────────┐

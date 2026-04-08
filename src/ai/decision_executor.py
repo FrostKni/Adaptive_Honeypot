@@ -104,6 +104,29 @@ class DecisionExecutor:
                 check_duplicate=True,
             )
     
+    async def _broadcast_execution(self, result: ExecutionResult, stage: str = "progress"):
+        """Broadcast execution progress to WebSocket subscribers."""
+        try:
+            from src.api.v1.endpoints.broadcast import get_manager
+            ws_manager = get_manager()
+            if ws_manager:
+                await ws_manager.broadcast({
+                    "type": "execution_update",
+                    "data": {
+                        "id": result.id,
+                        "decision_id": result.decision_id,
+                        "action": result.action,
+                        "status": result.status.value,
+                        "stage": stage,
+                        "timestamp": result.timestamp.isoformat(),
+                        "details": result.details,
+                        "error": result.error,
+                    }
+                }, channel="ai")
+                logger.debug(f"Broadcasted execution {result.id} at stage {stage}")
+        except Exception as e:
+            logger.error(f"Failed to broadcast execution: {e}")
+
     async def execute(
         self,
         decision_id: str,
@@ -140,13 +163,16 @@ class DecisionExecutor:
             }
         )
         
+        # Broadcast execution started
+        result.status = ExecutionStatus.RUNNING
+        await self._broadcast_execution(result, "started")
+        
         if action == "monitor":
             result.status = ExecutionStatus.SUCCESS
             result.details["message"] = "Monitoring mode - no action taken"
             self._record_result(result)
+            await self._broadcast_execution(result, "completed")
             return result
-        
-        result.status = ExecutionStatus.RUNNING
         
         try:
             if action == "reconfigure":
@@ -157,7 +183,7 @@ class DecisionExecutor:
                 success = await self._isolate_attacker(honeypot_id, source_ip)
             elif action == "switch_container":
                 success = await self._switch_container(
-                    honeypot_id, source_ip, configuration_changes
+                    honeypot_id, source_ip, configuration_changes, result
                 )
             else:
                 raise ValueError(f"Unknown action: {action}")
@@ -171,6 +197,7 @@ class DecisionExecutor:
             logger.error(f"Decision execution failed: {e}")
         
         self._record_result(result)
+        await self._broadcast_execution(result, "completed")
         return result
     
     async def _get_container(self, honeypot_id: str) -> Optional[docker.models.containers.Container]:
@@ -424,6 +451,7 @@ class DecisionExecutor:
         honeypot_id: str,
         source_ip: str,
         config_changes: Dict[str, Any],
+        result: ExecutionResult = None,
     ) -> bool:
         """
         Switch attacker to a new container transparently.
@@ -438,6 +466,8 @@ class DecisionExecutor:
             old_container = await self._get_container(honeypot_id)
             if not old_container:
                 logger.warning(f"Original container not found: {honeypot_id}")
+                if result:
+                    result.details["error_stage"] = "container_lookup"
                 return False
             
             # Get container details
@@ -445,6 +475,18 @@ class DecisionExecutor:
             honeypot_type = old_labels.get("honeypot.type", "ssh")
             port = int(old_labels.get("honeypot.port", "2222"))
             name = old_labels.get("honeypot.name", "unknown")
+            
+            # Update result with original container info
+            if result:
+                result.details["original_container"] = {
+                    "id": old_container.id[:12],
+                    "name": old_container.name,
+                    "honeypot_id": honeypot_id,
+                    "type": honeypot_type,
+                    "port": port,
+                    "status": old_container.status,
+                }
+                await self._broadcast_execution(result, "analyzing")
             
             # Generate new honeypot ID
             import uuid
@@ -460,16 +502,46 @@ class DecisionExecutor:
             
             logger.info(f"Creating switched container {new_honeypot_id}")
             
+            # Update result with deployment plan
+            if result:
+                result.details["deployment_plan"] = {
+                    "new_honeypot_id": new_honeypot_id,
+                    "new_name": f"{name}-enhanced",
+                    "deception_mode": "enhanced",
+                    "target_attacker": source_ip,
+                }
+                await self._broadcast_execution(result, "deploying")
+            
             # Use deployment manager to create new container
             from src.core.deployment import HoneypotDeploymentManager
             from src.core.db import HoneypotType
             
             deployment = HoneypotDeploymentManager()
             
-            # Find an available port
-            new_port = port + 100  # Offset port for new container
+            # Find an available port dynamically
+            import socket
+            def find_available_port(start_port: int, max_attempts: int = 100) -> int:
+                """Find an available port starting from start_port."""
+                for test_port in range(start_port, start_port + max_attempts):
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                            s.bind(('', test_port))
+                            return test_port
+                    except OSError:
+                        continue
+                raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_attempts}")
             
-            result = await deployment.deploy(
+            new_port = find_available_port(3000)  # Start from port 3000
+            
+            # Update result with port allocation
+            if result:
+                result.details["port_allocation"] = {
+                    "new_port": new_port,
+                    "method": "dynamic_allocation",
+                }
+                await self._broadcast_execution(result, "creating_container")
+            
+            deploy_result = await deployment.deploy(
                 honeypot_id=new_honeypot_id,
                 name=f"{name}-enhanced",
                 honeypot_type=HoneypotType(honeypot_type),
@@ -477,9 +549,33 @@ class DecisionExecutor:
                 config=new_config,
             )
             
-            if result.get("status") != "running":
+            if deploy_result.get("status") != "running":
                 logger.error(f"Failed to create switched container")
+                if result:
+                    result.details["deployment_error"] = deploy_result
                 return False
+            
+            # Get the new container details
+            new_container = await self._get_container(new_honeypot_id)
+            
+            # Update result with new container info
+            if result:
+                result.details["new_container"] = {
+                    "id": new_container.id[:12] if new_container else "unknown",
+                    "name": f"{name}-enhanced",
+                    "honeypot_id": new_honeypot_id,
+                    "type": honeypot_type,
+                    "port": new_port,
+                    "status": "running",
+                    "image": new_container.attrs.get('Config', {}).get('Image', 'unknown') if new_container else 'unknown',
+                }
+                result.details["switch_summary"] = {
+                    "old_honeypot": f"{honeypot_id}:{port}",
+                    "new_honeypot": f"{new_honeypot_id}:{new_port}",
+                    "attacker_ip": source_ip,
+                    "deception_mode": "enhanced",
+                }
+                await self._broadcast_execution(result, "container_created")
             
             # Now set up iptables redirect (requires host access)
             # This would redirect traffic from old port to new port
@@ -495,16 +591,79 @@ class DecisionExecutor:
             
         except Exception as e:
             logger.error(f"Container switch failed: {e}")
+            if result:
+                result.details["exception"] = str(e)
             return False
     
     def _record_result(self, result: ExecutionResult):
-        """Record execution result in history."""
+        """Record execution result in history and database."""
+        # Keep in-memory history
         self._execution_history.append(result)
         if len(self._execution_history) > self._max_history:
             self._execution_history.pop(0)
+        
+        # Persist to database
+        asyncio.create_task(self._persist_result(result))
+    
+    async def _persist_result(self, result: ExecutionResult):
+        """Persist execution result to database."""
+        try:
+            from src.core.db.session import get_db_context
+            from src.core.db.models import ExecutionHistoryDB
+            
+            async with get_db_context() as session:
+                # Calculate duration
+                duration_ms = None
+                if result.details.get("completed_at"):
+                    completed = datetime.fromisoformat(result.details["completed_at"])
+                    duration_ms = int((completed - result.timestamp).total_seconds() * 1000)
+                
+                db_record = ExecutionHistoryDB(
+                    id=result.id,
+                    decision_id=result.decision_id,
+                    action=result.action,
+                    honeypot_id=result.details.get("honeypot_id"),
+                    source_ip=result.details.get("source_ip"),
+                    status=result.status.value,
+                    started_at=result.timestamp,
+                    completed_at=datetime.utcnow() if result.status in [ExecutionStatus.SUCCESS, ExecutionStatus.FAILED] else None,
+                    duration_ms=duration_ms,
+                    success=result.status == ExecutionStatus.SUCCESS,
+                    error=result.error,
+                    details=result.details,
+                    config_changes=result.details.get("config_changes", {}),
+                    container_id=result.details.get("container_id"),
+                    container_name=result.details.get("container_name"),
+                )
+                
+                session.add(db_record)
+                await session.commit()
+                logger.debug(f"Persisted execution {result.id} to database")
+                
+        except Exception as e:
+            logger.error(f"Failed to persist execution to database: {e}")
     
     def get_execution_history(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get recent execution history."""
+        """Get recent execution history from database."""
+        # Try to load from database synchronously
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in an async context, use in-memory for now
+                return self._get_memory_history(limit)
+            
+            # Load from database
+            history = asyncio.run(self._load_history_from_db(limit))
+            if history:
+                return history
+        except Exception as e:
+            logger.warning(f"Failed to load history from DB: {e}")
+        
+        return self._get_memory_history(limit)
+    
+    def _get_memory_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get history from in-memory storage."""
         results = self._execution_history[-limit:]
         return [
             {
@@ -519,8 +678,59 @@ class DecisionExecutor:
             for r in results
         ]
     
+    async def _load_history_from_db(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Load execution history from database."""
+        try:
+            from src.core.db.session import get_db_context
+            from src.core.db.models import ExecutionHistoryDB
+            from sqlalchemy import select
+            
+            async with get_db_context() as session:
+                result = await session.execute(
+                    select(ExecutionHistoryDB)
+                    .order_by(ExecutionHistoryDB.started_at.desc())
+                    .limit(limit)
+                )
+                records = result.scalars().all()
+                
+                return [
+                    {
+                        "id": r.id,
+                        "decision_id": r.decision_id,
+                        "action": r.action,
+                        "status": r.status,
+                        "timestamp": r.started_at.isoformat() if r.started_at else None,
+                        "details": r.details or {},
+                        "error": r.error,
+                        "duration_ms": r.duration_ms,
+                        "success": r.success,
+                    }
+                    for r in records
+                ]
+        except Exception as e:
+            logger.error(f"Error loading history from DB: {e}")
+            return []
+    
     def get_stats(self) -> Dict[str, Any]:
-        """Get execution statistics."""
+        """Get execution statistics from database."""
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # We're in an async context, use in-memory for now
+                return self._get_memory_stats()
+            
+            # Load from database
+            stats = asyncio.run(self._load_stats_from_db())
+            if stats:
+                return stats
+        except Exception as e:
+            logger.warning(f"Failed to load stats from DB: {e}")
+        
+        return self._get_memory_stats()
+    
+    def _get_memory_stats(self) -> Dict[str, Any]:
+        """Get stats from in-memory history."""
         history = self._execution_history
         
         total = len(history)
@@ -541,6 +751,55 @@ class DecisionExecutor:
             "success_rate": round(success_count / total * 100, 1) if total > 0 else 0,
             "actions": action_counts,
         }
+    
+    async def _load_stats_from_db(self) -> Dict[str, Any]:
+        """Load execution statistics from database."""
+        try:
+            from src.core.db.session import get_db_context
+            from src.core.db.models import ExecutionHistoryDB
+            from sqlalchemy import select, func
+            
+            async with get_db_context() as session:
+                # Total count
+                total_result = await session.execute(
+                    select(func.count()).select_from(ExecutionHistoryDB)
+                )
+                total = total_result.scalar() or 0
+                
+                if total == 0:
+                    return {"total": 0}
+                
+                # Success count
+                success_result = await session.execute(
+                    select(func.count()).select_from(ExecutionHistoryDB)
+                    .where(ExecutionHistoryDB.success == True)
+                )
+                success_count = success_result.scalar() or 0
+                
+                # Failed count
+                failed_result = await session.execute(
+                    select(func.count()).select_from(ExecutionHistoryDB)
+                    .where(ExecutionHistoryDB.success == False)
+                )
+                failed_count = failed_result.scalar() or 0
+                
+                # Action distribution
+                action_result = await session.execute(
+                    select(ExecutionHistoryDB.action, func.count())
+                    .group_by(ExecutionHistoryDB.action)
+                )
+                action_counts = dict(action_result.all())
+                
+                return {
+                    "total": total,
+                    "success": success_count,
+                    "failed": failed_count,
+                    "success_rate": round(success_count / total * 100, 1) if total > 0 else 0,
+                    "actions": action_counts,
+                }
+        except Exception as e:
+            logger.error(f"Error loading stats from DB: {e}")
+            return {"total": 0}
 
 
 # Singleton instance

@@ -158,9 +158,19 @@ export default function CognitiveDashboard() {
     }
   }, [])
 
+  // Use a ref to track selected session ID without triggering re-renders
+  const selectedSessionIdRef = useRef<string | null>(null)
+  
+  // Keep the ref in sync with state
+  useEffect(() => {
+    selectedSessionIdRef.current = selectedSession?.session_id ?? null
+  }, [selectedSession?.session_id])
+
   // WebSocket connection for real-time updates
   const connectWebSocket = useCallback(() => {
-    const wsUrl = 'ws://127.0.0.1:8000/api/v1/cognitive/ws'
+    // Use relative URL through Vite proxy
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.host}/api/v1/cognitive/ws`
     
     try {
       const ws = new WebSocket(wsUrl)
@@ -184,7 +194,8 @@ export default function CognitiveDashboard() {
               }
               return [message.data, ...prev]
             })
-            if (selectedSession?.session_id === message.data.session_id) {
+            // Use ref to check if we should update selected session
+            if (selectedSessionIdRef.current === message.data.session_id) {
               setSelectedSession(message.data)
             }
             break
@@ -192,7 +203,8 @@ export default function CognitiveDashboard() {
             setCommandFeed(prev => [message.data, ...prev.slice(0, 49)])
             break
           case 'bias_detected':
-            if (selectedSession?.session_id === message.data.session_id) {
+            // Use ref to check if we should update selected session
+            if (selectedSessionIdRef.current === message.data.session_id) {
               setSelectedSession(prev => prev ? {
                 ...prev,
                 biases: [...prev.biases, message.data.bias]
@@ -200,7 +212,8 @@ export default function CognitiveDashboard() {
             }
             break
           case 'mental_model_update':
-            if (selectedSession?.session_id === message.data.session_id) {
+            // Use ref to check if we should update selected session
+            if (selectedSessionIdRef.current === message.data.session_id) {
               setSelectedSession(prev => prev ? {
                 ...prev,
                 mental_model: message.data.mental_model
@@ -221,7 +234,7 @@ export default function CognitiveDashboard() {
     } catch (error) {
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000)
     }
-  }, [selectedSession?.session_id])
+  }, []) // No dependencies - use ref for selected session check
 
   useEffect(() => {
     fetchData()

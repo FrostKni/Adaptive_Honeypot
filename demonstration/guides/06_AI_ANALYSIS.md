@@ -68,7 +68,7 @@ The AI Monitoring Service provides real-time threat analysis using Large Languag
 | **OpenAI** | GPT-4, GPT-4-Turbo | Low | High | Complex analysis |
 | **Anthropic** | Claude 3 Opus, Sonnet | Low | High | Detailed reasoning |
 | **Google** | Gemini Pro | Medium | Medium | Fast analysis |
-| **Local** | DeepSeek (api.ai.oac) | Very Low | Free | Real-time analysis |
+| **Local** | GLM5 (api.ai.oac) | Very Low | Free | Real-time analysis |
 
 ### Provider Selection Strategy
 
@@ -199,7 +199,7 @@ class EnhancedAIAnalyzer:
         
         Fallback order:
         1. Primary provider (OpenAI/Anthropic/Gemini)
-        2. Local LLM (DeepSeek)
+        2. Local LLM (GLM5)
         3. Rule-based fallback
         """
         
@@ -436,7 +436,7 @@ CACHE_TTL = 3600
 | OpenAI GPT-4 | 1.8s | 3.2s | 5.1s |
 | Anthropic Claude | 1.5s | 2.8s | 4.5s |
 | Google Gemini | 2.1s | 3.8s | 6.2s |
-| Local DeepSeek | 0.3s | 0.8s | 1.2s |
+| Local GLM5 | 0.3s | 0.8s | 1.2s |
 
 ### Accuracy Metrics
 
@@ -455,7 +455,7 @@ CACHE_TTL = 3600
 | OpenAI GPT-4 | $0.03 | $0.045 | $45 |
 | Anthropic Claude | $0.025 | $0.038 | $38 |
 | Google Gemini | $0.01 | $0.015 | $15 |
-| Local DeepSeek | $0 | $0 | $0 |
+| Local GLM5 | $0 | $0 | $0 |
 
 ---
 

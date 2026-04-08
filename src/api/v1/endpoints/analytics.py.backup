@@ -1,0 +1,181 @@
+"""
+Analytics endpoints.
+"""
+
+from typing import List, Optional
+from datetime import datetime, timedelta
+from sqlalchemy import func, select, distinct, case
+import requests
+import logging
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+from src.core.security import AuthContext, get_current_auth
+from src.core.db import get_db, get_db_context, HoneypotStatus
+from src.core.db.models import Honeypot, Session, AttackEvent, Adaptation
+from src.core.db.repositories import (
+    HoneypotRepository,
+    SessionRepository,
+    AdaptationRepository,
+)
+
+
+router = APIRouter()
+
+
+class DashboardStats(BaseModel):
+    """Dashboard statistics."""
+
+    total_attacks: int
+    active_honeypots: int
+    active_sessions: int
+    attacks_today: int
+    attacks_by_type: dict
+    attacks_by_severity: dict
+    top_attackers: List[dict]
+    attack_timeline: List[dict]
+    honeypot_health: List[dict]
+
+
+class TimeSeriesPoint(BaseModel):
+    """Time series data point."""
+
+    timestamp: datetime
+    value: float
+
+
+class TimeSeriesData(BaseModel):
+    """Time series data."""
+
+    metric: str
+    data: List[TimeSeriesPoint]
+
+
+class GeographicData(BaseModel):
+    """Geographic attack data."""
+
+    country_code: str
+    country_name: str
+    count: int
+    severity_distribution: dict
+
+
+class AttackLocation(BaseModel):
+    """Attack location with coordinates for map visualization."""
+
+    ip: str
+    lat: float
+    lng: float
+    country: str
+    city: Optional[str] = None
+    attack_count: int
+    last_attack: datetime
+    attack_types: List[str]
+    severity: str  # low, medium, high, critical
+
+
+class AttackTimeline(BaseModel):
+    """Attack timeline."""
+
+    events: List[dict]
+    start: datetime
+    end: datetime
+    interval: str  # hour, day, week
+
+
+class ServerLocation(BaseModel):
+    """Server geolocation information."""
+
+    ip: str
+    city: str
+    country: str
+    country_code: str
+    region: str
+    lat: float
+    lng: float
+    isp: str
+    timezone: str
+
+
+# Cache for server location (refresh every hour)
+_server_location_cache: Optional[ServerLocation] = None
+_server_location_timestamp: Optional[datetime] = None
+
+
+def get_server_location() -> ServerLocation:
+    """Get the server's geolocation using external IP."""
+    global _server_location_cache, _server_location_timestamp
+    
+    # Check cache (refresh every hour)
+    if _server_location_cache and _server_location_timestamp:
+        if datetime.now() - _server_location_timestamp < timedelta(hours=1):
+            return _server_location_cache
+    
+    try:
+        # Get external IP
+        ip_response = requests.get('https://api.ipify.org?format=json', timeout=5)
+        ip_data = ip_response.json()
+        server_ip = ip_data['ip']
+        
+        # Get geolocation for the IP
+        geo_response = requests.get(
+            f'http://ip-api.com/json/{server_ip}',
+            timeout=5
+        )
+        geo_data = geo_response.json()
+        
+        if geo_data.get('status') == 'success':
+            _server_location_cache = ServerLocation(
+                ip=server_ip,
+                city=geo_data.get('city', 'Unknown'),
+                country=geo_data.get('country', 'Unknown'),
+                country_code=geo_data.get('countryCode', 'XX'),
+                region=geo_data.get('regionName', 'Unknown'),
+                lat=geo_data.get('lat', 0.0),
+                lng=geo_data.get('lon', 0.0),
+                isp=geo_data.get('isp', 'Unknown'),
+                timezone=geo_data.get('timezone', 'UTC'),
+            )
+            _server_location_timestamp = datetime.now()
+            
+            logger.info(
+                f"Server location detected: {_server_location_cache.city}, "
+                f"{_server_location_cache.country} [{server_ip}]"
+            )
+            return _server_location_cache
+    except Exception as e:
+        logger.warning(f"Failed to get server location: {e}")
+    
+    # Fallback to a default location if geolocation fails
+    return ServerLocation(
+        ip='unknown',
+        city='Unknown',
+        country='Unknown',
+        country_code='XX',
+        region='Unknown',
+        lat=0.0,
+        lng=0.0,
+        isp='Unknown',
+        timezone='UTC',
+    )
+
+
+@router.get("/dashboard", response_model=DashboardStats)
+async def get_dashboard_stats(
+    auth: AuthContext = Depends(get_current_auth),
+):
+    """Get dashboard statistics from real database data."""
+    async with get_db_context() as session:
+        # Get active honeypots count
+        hp_repo = HoneypotRepository(session)
+        active_honeypots = await hp_repo.count({"status": HoneypotStatus.RUNNING})
+
+        # If no running, count all honeypots
+        if active_honeypots == 0:
+            total_hps = await hp_repo.count()
+            active_honeypots = total_hps  # Show total if none marked as running
+
+        # Get sessions from last 24h

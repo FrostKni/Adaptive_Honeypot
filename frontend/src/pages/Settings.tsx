@@ -68,8 +68,8 @@ function Settings() {
     },
     api: {
       apiKey: '',
-      apiEndpoint: 'http://localhost:8000/api/v1',
-      wsEndpoint: 'ws://localhost:8000/api/v1/ws',
+      apiEndpoint: '/api/v1',
+      wsEndpoint: '/api/v1/ws',
     },
     ai: {
       activeProvider: 'local',
@@ -77,7 +77,7 @@ function Settings() {
         enabled: true,
         apiKey: '',
         baseUrl: 'https://api.ai.oac/v1',
-        model: 'DeepSeek',
+        model: 'GLM5',
       },
       openai: {
         enabled: false,

@@ -5,7 +5,7 @@ Supports environment variables, .env files, and validation.
 
 from typing import Optional, List, Literal
 from urllib.parse import quote_plus
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
@@ -76,10 +76,11 @@ class RedisSettings(BaseSettings):
 class AISettings(BaseSettings):
     """AI provider configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="AI_")
+    model_config = SettingsConfigDict(env_prefix="AI_", env_file=".env", env_file_encoding="utf-8")
 
-    provider: Literal["openai", "anthropic", "gemini", "local"] = "openai"
+    provider: Literal["openai", "anthropic", "gemini", "custom"] = "openai"
     model: str = "gpt-4-turbo-preview"
+    base_url: Optional[str] = None          # custom OpenAI-compatible endpoint
     fallback_provider: Optional[str] = None
     max_tokens: int = 2000
     temperature: float = 0.3
@@ -89,9 +90,7 @@ class AISettings(BaseSettings):
     openai_api_key: Optional[SecretStr] = None
     anthropic_api_key: Optional[SecretStr] = None
     gemini_api_key: Optional[SecretStr] = None
-
-    requests_per_minute: int = 60
-    tokens_per_day: int = 100000
+    custom_api_key: Optional[SecretStr] = None  # key for custom base_url provider
 
 
 class HoneypotSettings(BaseSettings):
@@ -191,6 +190,13 @@ class AppSettings(BaseSettings):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     monitoring: MonitoringSettings = Field(default_factory=MonitoringSettings)
     alerting: AlertingSettings = Field(default_factory=AlertingSettings)
+
+    @model_validator(mode='after')
+    def set_default_admin_password(self) -> 'AppSettings':
+        # In development, if admin_password is empty, default to admin_username
+        if self.environment == 'development' and not self.admin_password:
+            self.admin_password = self.admin_username
+        return self
 
 
 def validate_production_secrets(settings: AppSettings) -> None:

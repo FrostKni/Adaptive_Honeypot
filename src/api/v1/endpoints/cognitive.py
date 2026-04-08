@@ -24,16 +24,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Cognitive Deception"])
 
-# Global engine instance
+# Global engine instance — shared with CognitiveIntegrationBridge
 _engine: Optional[CognitiveDeceptionEngine] = None
 
 
 def get_engine() -> CognitiveDeceptionEngine:
-    """Get or create the cognitive deception engine."""
-    global _engine
-    if _engine is None:
-        _engine = CognitiveDeceptionEngine()
-    return _engine
+    """Get the shared CognitiveDeceptionEngine from the global bridge."""
+    from src.collectors.cognitive_bridge import get_cognitive_bridge
+    return get_cognitive_bridge().engine
 
 
 # === Request/Response Models ===
@@ -660,9 +658,61 @@ async def get_cognitive_stats():
         async for db_session in get_db():
             repo = CognitiveProfileRepository(db_session)
             stats = await repo.get_deception_effectiveness_stats()
+            
+            # Add additional metrics
+            from src.core.db.session import get_db_context
+            from src.core.db.models import CognitiveProfileDB, DeceptionEventDB
+            from sqlalchemy import select, func
+            
+            async with get_db_context() as session:
+                # Total sessions
+                total_sessions = await session.execute(
+                    select(func.count()).select_from(CognitiveProfileDB)
+                )
+                stats["total_sessions"] = total_sessions.scalar() or 0
+                
+                # Total deception events
+                total_events = await session.execute(
+                    select(func.count()).select_from(DeceptionEventDB)
+                )
+                stats["total_deception_events"] = total_events.scalar() or 0
+                
+                # Active sessions (not final)
+                active_sessions = await session.execute(
+                    select(func.count()).select_from(CognitiveProfileDB)
+                    .where(CognitiveProfileDB.is_final == False)
+                )
+                stats["active_sessions"] = active_sessions.scalar() or 0
+                
+                # Average scores
+                avg_overconfidence = await session.execute(
+                    select(func.avg(CognitiveProfileDB.overconfidence_score))
+                )
+                stats["avg_overconfidence"] = round(float(avg_overconfidence.scalar() or 0), 3)
+                
+                avg_persistence = await session.execute(
+                    select(func.avg(CognitiveProfileDB.persistence_score))
+                )
+                stats["avg_persistence"] = round(float(avg_persistence.scalar() or 0), 3)
+                
+                avg_curiosity = await session.execute(
+                    select(func.avg(CognitiveProfileDB.curiosity_score))
+                )
+                stats["avg_curiosity"] = round(float(avg_curiosity.scalar() or 0), 3)
+                
+                # Recent activity (last 24 hours)
+                from datetime import timedelta
+                yesterday = datetime.utcnow() - timedelta(hours=24)
+                recent_profiles = await session.execute(
+                    select(func.count()).select_from(CognitiveProfileDB)
+                    .where(CognitiveProfileDB.updated_at >= yesterday)
+                )
+                stats["profiles_last_24h"] = recent_profiles.scalar() or 0
+            
             return stats
             
     except Exception as e:
+        logger.error(f"Error getting cognitive stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -725,41 +775,94 @@ async def list_cognitive_sessions(
     List all cognitive sessions with profiles.
     
     Returns sessions that have been analyzed by the cognitive engine.
+    Loads from database for persistence across restarts.
     """
-    engine = get_engine()
     sessions = []
     
-    for session_id, profile in engine._profiles.items():
-        session_data = {
-            "session_id": session_id,
-            "source_ip": getattr(profile, 'source_ip', session_id.replace('attack-', '')),
-            "started_at": profile.first_command_time.isoformat() if hasattr(profile, 'first_command_time') and profile.first_command_time else "",
-            "last_activity": profile.last_command_time.isoformat() if hasattr(profile, 'last_command_time') and profile.last_command_time else "",
-            "biases": [b.to_dict() for b in profile.detected_biases],
-            "mental_model": profile.mental_model.to_dict() if profile.mental_model else {},
-            "cognitive_metrics": {
-                "overconfidence_score": profile.overconfidence_score,
-                "persistence_score": profile.persistence_score,
-                "tunnel_vision_score": profile.tunnel_vision_score,
-                "curiosity_score": profile.curiosity_score,
-                "exploitation_potential": 0.5,
-                "adaptability_score": profile.learning_rate,
-            },
-            "deception_metrics": {
-                "total_applied": profile.total_deceptions_applied,
-                "successful": profile.successful_deceptions,
-                "success_rate": profile.deception_success_rate,
-                "suspicion_level": profile.suspicion_level,
-                "by_strategy": {},
-            },
-            "commands": [],
-            "active": True,
-        }
+    # Try to load from database first
+    try:
+        from src.core.db import get_db
+        from src.core.db.cognitive_repository import CognitiveProfileRepository
         
-        if active_only and not session_data["active"]:
-            continue
+        async for db_session in get_db():
+            repo = CognitiveProfileRepository(db_session)
+            profiles = await repo.get_recent_profiles(limit=limit)
             
-        sessions.append(session_data)
+            for profile in profiles:
+                session_data = {
+                    "session_id": profile.session_id,
+                    "source_ip": profile.source_ip or "",
+                    "started_at": profile.created_at.isoformat() if profile.created_at else "",
+                    "last_activity": profile.updated_at.isoformat() if profile.updated_at else "",
+                    "biases": profile.detected_biases or [],
+                    "mental_model": {
+                        "beliefs": profile.beliefs or {},
+                        "knowledge": profile.knowledge or [],
+                        "goals": profile.goals or [],
+                        "expectations": profile.expectations or {},
+                    },
+                    "cognitive_metrics": {
+                        "overconfidence_score": profile.overconfidence_score or 0,
+                        "persistence_score": profile.persistence_score or 0,
+                        "tunnel_vision_score": profile.tunnel_vision_score or 0,
+                        "curiosity_score": profile.curiosity_score or 0,
+                        "exploitation_potential": 0.5,
+                        "adaptability_score": profile.learning_rate or 0,
+                    },
+                    "deception_metrics": {
+                        "total_applied": profile.total_deceptions_applied or 0,
+                        "successful": profile.successful_deceptions or 0,
+                        "success_rate": profile.deception_success_rate or 0,
+                        "suspicion_level": profile.suspicion_level or 0,
+                        "by_strategy": {},
+                    },
+                    "commands": [],
+                    "active": not profile.is_final if profile.is_final is not None else True,
+                }
+                
+                if active_only and not session_data["active"]:
+                    continue
+                    
+                sessions.append(session_data)
+            
+            break  # Exit the async for loop after first iteration
+            
+    except Exception as e:
+        logger.warning(f"Failed to load cognitive sessions from DB: {e}, falling back to in-memory")
+        # Fall back to in-memory engine data
+        engine = get_engine()
+        
+        for session_id, profile in engine._profiles.items():
+            session_data = {
+                "session_id": session_id,
+                "source_ip": getattr(profile, 'source_ip', session_id.replace('attack-', '')),
+                "started_at": profile.first_command_time.isoformat() if hasattr(profile, 'first_command_time') and profile.first_command_time else "",
+                "last_activity": profile.last_command_time.isoformat() if hasattr(profile, 'last_command_time') and profile.last_command_time else "",
+                "biases": [b.to_dict() for b in profile.detected_biases],
+                "mental_model": profile.mental_model.to_dict() if profile.mental_model else {},
+                "cognitive_metrics": {
+                    "overconfidence_score": profile.overconfidence_score,
+                    "persistence_score": profile.persistence_score,
+                    "tunnel_vision_score": profile.tunnel_vision_score,
+                    "curiosity_score": profile.curiosity_score,
+                    "exploitation_potential": 0.5,
+                    "adaptability_score": profile.learning_rate,
+                },
+                "deception_metrics": {
+                    "total_applied": profile.total_deceptions_applied,
+                    "successful": profile.successful_deceptions,
+                    "success_rate": profile.deception_success_rate,
+                    "suspicion_level": profile.suspicion_level,
+                    "by_strategy": {},
+                },
+                "commands": [],
+                "active": True,
+            }
+            
+            if active_only and not session_data["active"]:
+                continue
+                
+            sessions.append(session_data)
     
     return {"sessions": sessions[:limit], "total": len(sessions)}
 

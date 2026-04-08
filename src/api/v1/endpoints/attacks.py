@@ -72,7 +72,15 @@ async def list_events(
         items = []
         for e in events:
             # Extract honeypot_id from session_id (format: session-<honeypot_id>)
-            honeypot_id = e.session_id.replace("session-", "") if e.session_id else "unknown"
+            # If session_id is NULL, extract from tags or use default
+            if e.session_id:
+                honeypot_id = e.session_id.replace("session-", "").split("-")[0] if e.session_id.startswith("session-") else e.session_id
+            else:
+                honeypot_id = "unknown"
+            
+            # Extract honeypot_name from tags (format: [event_type, "cowrie", "honeypot_name"])
+            tags = e.tags or []
+            honeypot_name = tags[2] if len(tags) > 2 else honeypot_id
             
             # Get data from event
             data = e.data or {}
@@ -80,12 +88,12 @@ async def list_events(
             items.append(AttackEventResponse(
                 id=str(e.id),
                 honeypot_id=honeypot_id,
-                honeypot_name=honeypot_id,  # Use honeypot_id as name for now
-                type=e.event_type,
+                honeypot_name=honeypot_name,
+                type=e.event_type,  # Map event_type to type for frontend
                 severity=e.severity.value if hasattr(e.severity, 'value') else str(e.severity),
                 source_ip=data.get("source_ip", "0.0.0.0"),
                 source_port=data.get("source_port", 0),
-                protocol="ssh",  # Default to SSH
+                protocol=data.get("protocol", "ssh"),  # Get from data or default to SSH
                 payload=data.get("command", "") or data.get("username", "") or str(data),
                 timestamp=e.timestamp,
                 session_id=e.session_id,

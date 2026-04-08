@@ -48,7 +48,7 @@ Result: Attacker stays engaged 82% longer
 - OpenAI (GPT-4, GPT-4-Turbo)
 - Anthropic (Claude)
 - Google Gemini
-- Local LLM (DeepSeek via api.ai.oac)
+- Local LLM (GLM5 via api.ai.oac)
 
 **Decision Engine Actions**:
 1. **Monitor** - Continue observation
@@ -99,7 +99,7 @@ Result: Attacker stays engaged 82% longer
 - OpenAI API
 - Anthropic API
 - Google Generative AI
-- Local LLM (DeepSeek)
+- Local LLM (GLM5)
 
 ---
 
@@ -123,7 +123,7 @@ Result: Attacker stays engaged 82% longer
 ┌──────────▼──────────┐    ┌────────────▼──────────────────────┐
 │  AIMonitoringService │    │    CognitiveIntegrationBridge      │
 │  (LocalLLMClient /  │    │  (routes commands to CBDF engine)  │
-│   DeepSeek)         │    └────────────┬──────────────────────┘
+│   GLM5)         │    └────────────┬──────────────────────┘
 └──────────┬──────────┘                 │
            │ recommended_action         │ CognitiveProfile
 ┌──────────▼──────────┐    ┌────────────▼──────────────────────┐

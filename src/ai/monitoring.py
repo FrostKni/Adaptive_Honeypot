@@ -7,14 +7,13 @@ import asyncio
 import json
 import logging
 import time
-import os
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import deque
 
-import httpx
+from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -81,75 +80,7 @@ class AIDecision:
     mitre_attack_ids: List[str] = field(default_factory=list)
 
 
-class LocalLLMClient:
-    """Client for local LLM (api.ai.oac)."""
 
-    def __init__(self, base_url: str = "https://api.ai.oac/v1", api_key: str = None):
-        self.base_url = base_url
-        self.api_key = api_key or os.environ.get("MY_API_KEY", "local")
-        self.model = "DeepSeek"
-        self.client = httpx.AsyncClient(timeout=30.0)
-
-    async def generate(
-        self,
-        prompt: str,
-        system_prompt: str = None,
-        temperature: float = 0.3,
-        max_tokens: int = 2000,
-    ) -> Dict[str, Any]:
-        """Generate response from local LLM."""
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
-
-        try:
-            start_time = time.time()
-            response = await self.client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
-            )
-            duration_ms = int((time.time() - start_time) * 1000)
-
-            if response.status_code == 200:
-                data = response.json()
-                message = data["choices"][0]["message"]
-                # Handle both 'content' and 'reasoning_content' (DeepSeek)
-                content = message.get("content") or message.get("reasoning_content", "")
-                return {
-                    "content": content,
-                    "tokens_used": data.get("usage", {}).get("total_tokens", 0),
-                    "duration_ms": duration_ms,
-                    "success": True,
-                }
-            else:
-                logger.error(f"LLM error: {response.status_code} - {response.text}")
-                return {
-                    "content": "",
-                    "error": response.text,
-                    "duration_ms": duration_ms,
-                    "success": False,
-                }
-        except Exception as e:
-            logger.error(f"LLM request failed: {e}")
-            return {"content": "", "error": str(e), "duration_ms": 0, "success": False}
-
-    async def health_check(self) -> bool:
-        """Check if LLM is available."""
-        try:
-            response = await self.client.get(f"{self.base_url}/health", timeout=5.0)
-            return response.status_code == 200
-        except:
-            return False
 
 
 class AIMonitoringService:
@@ -162,7 +93,9 @@ class AIMonitoringService:
     """
 
     def __init__(self):
-        self.llm_client = LocalLLMClient()
+        # Use EnhancedAIAnalyzer with full provider fallback chain
+        from src.ai.analyzer import get_analyzer
+        self.analyzer = get_analyzer()
         self.is_running = False
         self.status = AIActivityStatus.IDLE
         self.activities: deque = deque(maxlen=100)  # Last 100 activities
@@ -177,6 +110,7 @@ class AIMonitoringService:
         self.container_configs: Dict[str, Dict] = {}
         self.active_sessions: Dict[str, Dict] = {}
         self.subscribers: List = []
+        self.decision_subscribers: List = []  # Subscribers for decision updates
 
     async def start(self):
         """Start the AI monitoring service."""
@@ -207,6 +141,17 @@ class AIMonitoringService:
             except Exception as e:
                 logger.error(f"Subscriber notification failed: {e}")
 
+    async def _notify_decision_subscribers(self, decision: AIDecision):
+        """Notify all decision subscribers of new decision."""
+        for callback in self.decision_subscribers:
+            try:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(decision)
+                else:
+                    callback(decision)
+            except Exception as e:
+                logger.error(f"Decision subscriber notification failed: {e}")
+
     def add_event(self, event: AttackEvent):
         """Add attack event to processing queue."""
         self.pending_events.append(event)
@@ -227,6 +172,27 @@ class AIMonitoringService:
             if len(self.active_sessions) > 0:
                 await self._analyze_patterns()
 
+    async def _broadcast_thought(self, chunk: str, full_content: str, source_ip: str):
+        """Broadcast LLM thought chunk to WebSocket subscribers."""
+        try:
+            from src.api.v1.endpoints.broadcast import get_manager
+            ws_manager = get_manager()
+            if ws_manager:
+                logger.debug(f"Broadcasting LLM thought to {len(ws_manager.active_connections)} connections")
+                await ws_manager.broadcast({
+                    "type": "llm_thought",
+                    "data": {
+                        "chunk": chunk,
+                        "content": full_content,
+                        "source_ip": source_ip,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                }, channel="ai")
+            else:
+                logger.warning("WebSocket manager not available for broadcasting thoughts")
+        except Exception as e:
+            logger.error(f"Failed to broadcast thought: {e}")
+
     async def _analyze_event(self, event: AttackEvent):
         """Analyze single attack event."""
         activity_id = f"act-{int(time.time() * 1000)}"
@@ -246,69 +212,131 @@ class AIMonitoringService:
         self.activities.append(activity)
         await self._notify_subscribers(activity)
 
+        # Push activity to AI WebSocket channel in real-time
+        try:
+            from src.api.v1.endpoints.broadcast import get_manager
+            ws_manager = get_manager()
+            if ws_manager:
+                await ws_manager.broadcast({
+                    "type": "activity",
+                    "data": {
+                        "id": activity.id,
+                        "timestamp": activity.timestamp.isoformat(),
+                        "status": activity.status.value,
+                        "action": activity.action,
+                        "details": activity.details,
+                        "duration_ms": activity.duration_ms,
+                        "success": activity.success,
+                    }
+                }, channel="ai")
+        except Exception as e:
+            logger.debug(f"Failed to broadcast activity: {e}")
+
         self.status = AIActivityStatus.ANALYZING
 
         try:
-            # Build analysis prompt
-            prompt = self._build_analysis_prompt(event)
+            # Build event dict for EnhancedAIAnalyzer
+            event_dict = {
+                "source_ip": event.source_ip,
+                "honeypot_id": event.honeypot_id,
+                "attack_type": event.attack_type,
+                "severity": event.severity,
+                "timestamp": event.timestamp.isoformat(),
+                "commands": event.commands,
+                "credentials_tried": event.credentials_tried,
+                "raw_log": event.raw_log,
+            }
 
-            # Get AI analysis
-            response = await self.llm_client.generate(
-                prompt=prompt, system_prompt=self._get_system_prompt(), temperature=0.3
+            start_ms = int(time.time() * 1000)
+            
+            # Create thought callback for streaming
+            async def thought_callback(chunk: str, full_content: str):
+                await self._broadcast_thought(chunk, full_content, event.source_ip)
+            
+            # Use EnhancedAIAnalyzer with streaming for real-time thoughts
+            result = await self.analyzer.analyze_attack(
+                events=[event_dict],
+                context={"honeypot_id": event.honeypot_id},
+                thought_callback=thought_callback,
+            )
+            duration_ms = int(time.time() * 1000) - start_ms
+
+            # Map AIAnalysisResult → internal analysis dict
+            analysis = {
+                "threat_level": result.threat_level,
+                "threat_score": {"low": 0.2, "medium": 0.5, "high": 0.75, "critical": 0.95}.get(result.threat_level, 0.2),
+                "attacker_skill": result.attacker_skill_level,
+                "attack_objectives": result.attack_objectives,
+                "reasoning": result.reasoning,
+                "confidence": result.confidence,
+                "mitre_attack_ids": result.mitre_attack_ids,
+                "recommended_action": result.deception_strategies[0] if result.deception_strategies else "monitor",
+                "configuration_changes": result.configuration_changes,
+            }
+
+            # Create decision
+            decision = AIDecision(
+                id=f"dec-{int(time.time() * 1000)}",
+                timestamp=datetime.utcnow(),
+                source_ip=event.source_ip,
+                threat_level=ThreatLevel(analysis["threat_level"]),
+                threat_score=analysis["threat_score"],
+                reasoning=analysis["reasoning"],
+                action=self._determine_action(analysis),
+                configuration_changes=analysis["configuration_changes"],
+                confidence=analysis["confidence"],
+                mitre_attack_ids=analysis["mitre_attack_ids"],
             )
 
-            if response["success"]:
-                # Parse AI response
-                analysis = self._parse_analysis(response["content"])
+            self.decisions.append(decision)
 
-                # Create decision
-                decision = AIDecision(
-                    id=f"dec-{int(time.time() * 1000)}",
-                    timestamp=datetime.utcnow(),
-                    source_ip=event.source_ip,
-                    threat_level=ThreatLevel(analysis.get("threat_level", "low")),
-                    threat_score=analysis.get("threat_score", 0.0),
-                    reasoning=analysis.get("reasoning", ""),
-                    action=self._determine_action(analysis),
-                    configuration_changes=analysis.get("configuration_changes", {}),
-                    confidence=analysis.get("confidence", 0.5),
-                    mitre_attack_ids=analysis.get("mitre_attack_ids", []),
-                )
+            # Save decision to database for persistence
+            await self.save_decision_to_db(decision, event, analysis)
 
-                self.decisions.append(decision)
+            # Notify decision subscribers
+            await self._notify_decision_subscribers(decision)
 
-                # Log decision
-                decision_activity = AIActivity(
-                    id=f"act-{int(time.time() * 1000)}",
-                    timestamp=datetime.utcnow(),
-                    status=AIActivityStatus.DECISION,
-                    action=f"Decision: {decision.action}",
-                    details={
-                        "threat_level": decision.threat_level.value,
-                        "threat_score": decision.threat_score,
-                        "confidence": decision.confidence,
-                        "reasoning": decision.reasoning[:200],
-                    },
-                    duration_ms=response["duration_ms"],
-                )
-                self.activities.append(decision_activity)
-                await self._notify_subscribers(decision_activity)
+            # Push decision to AI WebSocket channel in real-time
+            try:
+                from src.api.v1.endpoints.broadcast import get_manager
+                ws_manager = get_manager()
+                if ws_manager:
+                    await ws_manager.broadcast({
+                        "type": "decision",
+                        "data": {
+                            "id": decision.id,
+                            "timestamp": decision.timestamp.isoformat(),
+                            "source_ip": decision.source_ip,
+                            "threat_level": decision.threat_level.value,
+                            "threat_score": decision.threat_score,
+                            "reasoning": decision.reasoning,
+                            "action": decision.action,
+                            "confidence": decision.confidence,
+                            "mitre_attack_ids": decision.mitre_attack_ids,
+                        }
+                    }, channel="ai")
+            except Exception as e:
+                logger.debug(f"Failed to broadcast decision: {e}")
 
-                # Execute decision
-                await self._execute_decision(decision, event)
+            # Log decision
+            decision_activity = AIActivity(
+                id=f"act-{int(time.time() * 1000)}",
+                timestamp=datetime.utcnow(),
+                status=AIActivityStatus.DECISION,
+                action=f"Decision: {decision.action}",
+                details={
+                    "threat_level": decision.threat_level.value,
+                    "threat_score": decision.threat_score,
+                    "confidence": decision.confidence,
+                    "reasoning": decision.reasoning[:200],
+                },
+                duration_ms=duration_ms,
+            )
+            self.activities.append(decision_activity)
+            await self._notify_subscribers(decision_activity)
 
-            else:
-                # Log error
-                error_activity = AIActivity(
-                    id=f"act-{int(time.time() * 1000)}",
-                    timestamp=datetime.utcnow(),
-                    status=AIActivityStatus.ERROR,
-                    action="Analysis failed",
-                    details={"error": response.get("error", "Unknown error")},
-                    success=False,
-                )
-                self.activities.append(error_activity)
-                await self._notify_subscribers(error_activity)
+            # Execute decision
+            await self._execute_decision(decision, event)
 
         except Exception as e:
             logger.error(f"Event analysis failed: {e}")
@@ -369,43 +397,39 @@ class AIMonitoringService:
             logger.warning(f"Failed to broadcast AI decision: {e}")
 
         if decision.action == "monitor":
-            # Just continue monitoring, no action needed
             activity = AIActivity(
                 id=f"act-{int(time.time() * 1000)}",
                 timestamp=datetime.utcnow(),
                 status=AIActivityStatus.IDLE,
                 action="Monitoring (no action needed)",
-                details={
-                    "source_ip": decision.source_ip,
-                    "threat_score": decision.threat_score,
-                },
+                details={"source_ip": decision.source_ip, "threat_score": decision.threat_score},
             )
             self.activities.append(activity)
             await self._notify_subscribers(activity)
-            return
+            # Still record in executor for execution history
 
-        activity = AIActivity(
-            id=f"act-{int(time.time() * 1000)}",
-            timestamp=datetime.utcnow(),
-            status=AIActivityStatus.RECONFIGURING,
-            action=f"Executing: {decision.action}",
-            details={
-                "source_ip": decision.source_ip,
-                "changes": decision.configuration_changes,
-            },
-        )
-        self.activities.append(activity)
-        await self._notify_subscribers(activity)
-
-        self.status = AIActivityStatus.RECONFIGURING
+        else:
+            activity = AIActivity(
+                id=f"act-{int(time.time() * 1000)}",
+                timestamp=datetime.utcnow(),
+                status=AIActivityStatus.RECONFIGURING,
+                action=f"Executing: {decision.action}",
+                details={"source_ip": decision.source_ip, "changes": decision.configuration_changes},
+            )
+            self.activities.append(activity)
+            await self._notify_subscribers(activity)
+            self.status = AIActivityStatus.RECONFIGURING
 
         try:
-            # Import and use the decision executor
             from src.ai.decision_executor import get_executor
-
             executor = get_executor()
 
-            # Execute the decision
+            # Skip Docker actions when Docker is unavailable
+            if executor.client is None and decision.action != "monitor":
+                logger.warning("Docker unavailable — skipping execution of action: %s", decision.action)
+                activity.details["skipped"] = "Docker unavailable"
+                return
+
             result = await executor.execute(
                 decision_id=decision.id,
                 action=decision.action,
@@ -447,63 +471,6 @@ class AIMonitoringService:
 
         self.status = AIActivityStatus.IDLE
 
-    def _build_analysis_prompt(self, event: AttackEvent) -> str:
-        """Build analysis prompt for LLM."""
-        return f"""Analyze this honeypot attack event and provide a threat assessment.
-
-Event Details:
-- Source IP: {event.source_ip}
-- Honeypot: {event.honeypot_id}
-- Attack Type: {event.attack_type}
-- Severity: {event.severity}
-- Timestamp: {event.timestamp.isoformat()}
-- Commands: {json.dumps(event.commands[:10])}
-- Credentials Tried: {len(event.credentials_tried)} attempts
-
-Raw Log:
-{event.raw_log[:1000]}
-
-Provide analysis as JSON:
-{{
-  "threat_level": "low|medium|high|critical",
-  "threat_score": 0.0-1.0,
-  "attacker_skill": "script_kiddie|intermediate|advanced|expert",
-  "attack_objectives": ["list of objectives"],
-  "reasoning": "brief explanation",
-  "confidence": 0.0-1.0,
-  "mitre_attack_ids": ["Txxxx"],
-  "recommended_action": "monitor|reconfigure|switch_container|isolate",
-  "configuration_changes": {{}}
-}}"""
-
-    def _get_system_prompt(self) -> str:
-        """Get system prompt for AI."""
-        return """You are a cybersecurity AI analyzing honeypot attacks in real-time.
-Your role is to:
-1. Assess threat levels accurately
-2. Identify attacker objectives and skill level
-3. Recommend appropriate defensive actions
-4. Suggest configuration changes to enhance deception
-
-Always respond with valid JSON. Be concise and actionable."""
-
-    def _parse_analysis(self, content: str) -> Dict:
-        """Parse AI analysis response."""
-        try:
-            # Try to extract JSON from response
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0]
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0]
-            return json.loads(content.strip())
-        except:
-            return {
-                "threat_level": "low",
-                "threat_score": 0.3,
-                "reasoning": "Failed to parse AI response",
-                "confidence": 0.1,
-                "recommended_action": "monitor",
-            }
 
     def _determine_action(self, analysis: Dict) -> str:
         """Determine action based on analysis."""
@@ -529,6 +496,17 @@ Always respond with valid JSON. Be concise and actionable."""
 
     def get_status(self) -> Dict[str, Any]:
         """Get current AI status."""
+        provider = settings.ai.provider
+        api_key = None
+        if provider == "openai" and settings.ai.openai_api_key:
+            api_key = settings.ai.openai_api_key.get_secret_value()
+        elif provider == "anthropic" and settings.ai.anthropic_api_key:
+            api_key = settings.ai.anthropic_api_key.get_secret_value()
+        elif provider == "gemini" and settings.ai.gemini_api_key:
+            api_key = settings.ai.gemini_api_key.get_secret_value()
+        elif provider == "custom" and settings.ai.custom_api_key:
+            api_key = settings.ai.custom_api_key.get_secret_value()
+
         return {
             "is_running": self.is_running,
             "status": self.status.value,
@@ -536,7 +514,11 @@ Always respond with valid JSON. Be concise and actionable."""
             "total_activities": len(self.activities),
             "total_decisions": len(self.decisions),
             "active_sessions": len(self.active_sessions),
-            "llm_available": True,  # Would check actual LLM status
+            "llm_available": True,
+            "ai_provider": provider,
+            "ai_model": settings.ai.model,
+            "ai_base_url": settings.ai.base_url if provider == "custom" else None,
+            "api_key_configured": bool(api_key),
         }
 
     def get_recent_activities(self, limit: int = 20) -> List[Dict]:
@@ -570,6 +552,33 @@ Always respond with valid JSON. Be concise and actionable."""
             }
             for d in list(self.decisions)[-limit:]
         ]
+
+    async def save_decision_to_db(self, decision: AIDecision, event: AttackEvent, analysis: Dict):
+        """Save AI decision to database for persistence."""
+        try:
+            from src.core.db.session import get_db_context
+            from src.core.db.repositories import AIDecisionRepository
+
+            async with get_db_context() as session:
+                repo = AIDecisionRepository(session)
+                # AIDecisionDB has no session_id FK — do not pass it
+                await repo.create(
+                    id=decision.id,
+                    source_ip=decision.source_ip,
+                    honeypot_id=event.honeypot_id,
+                    threat_level=decision.threat_level.value,
+                    threat_score=decision.threat_score,
+                    confidence=decision.confidence,
+                    action=decision.action,
+                    reasoning=decision.reasoning,
+                    configuration_changes=decision.configuration_changes,
+                    mitre_attack_ids=decision.mitre_attack_ids,
+                    attacker_skill=analysis.get("attacker_skill"),
+                    attack_objectives=analysis.get("attack_objectives", []),
+                )
+                logger.info(f"Saved decision {decision.id} to database")
+        except Exception as e:
+            logger.error(f"Failed to save decision to database: {e}")
 
 
 # Global AI monitoring service instance

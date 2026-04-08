@@ -298,32 +298,30 @@ class CognitiveIntegrationBridge:
             return
         
         try:
-            from src.core.db import get_db
+            from src.core.db.session import get_db_context
             from src.core.db.models import Session as DBSession
             from src.core.db.cognitive_repository import CognitiveProfileRepository
-            
-            async for db_session in get_db():
+
+            async with get_db_context() as db_session:
                 try:
-                    # Store cognitive profile using repository
                     repo = CognitiveProfileRepository(db_session)
                     await repo.store_profile(
                         session_id=session_id,
                         profile=profile,
                         is_final=is_final,
                     )
-                    
-                    # Also update session with skill level
+
                     db_sess = await db_session.get(DBSession, session_id)
                     if db_sess and not db_sess.attacker_skill:
                         db_sess.attacker_skill = self._infer_skill_level(profile)
                         await db_session.commit()
-                    
+
                     logger.debug(f"Stored cognitive profile for session {session_id}")
-                    
+
                 except Exception as e:
                     logger.error(f"Error storing cognitive profile: {e}")
                     await db_session.rollback()
-                    
+
         except Exception as e:
             logger.debug(f"Could not store cognitive profile: {e}")
     
@@ -335,10 +333,10 @@ class CognitiveIntegrationBridge:
     ):
         """Store a deception event in the database."""
         try:
-            from src.core.db import get_db
+            from src.core.db.session import get_db_context
             from src.core.db.cognitive_repository import CognitiveProfileRepository
-            
-            async for db_session in get_db():
+
+            async with get_db_context() as db_session:
                 try:
                     repo = CognitiveProfileRepository(db_session)
                     await repo.store_deception_event(

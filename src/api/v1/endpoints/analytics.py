@@ -5,9 +5,13 @@ Analytics endpoints.
 from typing import List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import func, select, distinct, case
+import requests
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from src.core.security import AuthContext, get_current_auth
 from src.core.db import get_db, get_db_context, HoneypotStatus
@@ -617,3 +621,98 @@ async def get_top_credentials(
         ]
 
         return {"credentials": credentials}
+
+
+class ServerLocation(BaseModel):
+    """Server geolocation information."""
+    ip: str
+    city: str
+    country: str
+    country_code: str
+    region: str
+    lat: float
+    lng: float
+    isp: str
+    timezone: str
+
+
+# Cache for server location (refresh every hour)
+_server_location_cache: Optional[ServerLocation] = None
+_server_location_timestamp: Optional[datetime] = None
+
+
+def get_server_location() -> ServerLocation:
+    """Get the server's geolocation using external IP."""
+    global _server_location_cache, _server_location_timestamp
+    
+    # Check cache (refresh every hour)
+    if _server_location_cache and _server_location_timestamp:
+        if datetime.now() - _server_location_timestamp < timedelta(hours=1):
+            return _server_location_cache
+    
+    try:
+        # Get external IP
+        ip_response = requests.get('https://api.ipify.org?format=json', timeout=5)
+        ip_data = ip_response.json()
+        server_ip = ip_data['ip']
+        
+        # Get geolocation for the IP
+        geo_response = requests.get(
+            f'http://ip-api.com/json/{server_ip}',
+            timeout=5
+        )
+        geo_data = geo_response.json()
+        
+        if geo_data.get('status') == 'success':
+            _server_location_cache = ServerLocation(
+                ip=server_ip,
+                city=geo_data.get('city', 'Unknown'),
+                country=geo_data.get('country', 'Unknown'),
+                country_code=geo_data.get('countryCode', 'XX'),
+                region=geo_data.get('regionName', 'Unknown'),
+                lat=geo_data.get('lat', 0.0),
+                lng=geo_data.get('lon', 0.0),
+                isp=geo_data.get('isp', 'Unknown'),
+                timezone=geo_data.get('timezone', 'UTC'),
+            )
+            _server_location_timestamp = datetime.now()
+            
+            logger.info(
+                f"Server location detected: {_server_location_cache.city}, "
+                f"{_server_location_cache.country} [{server_ip}]"
+            )
+            return _server_location_cache
+    except Exception as e:
+        logger.warning(f"Failed to get server location: {e}")
+    
+    # Fallback to a default location if geolocation fails
+    return ServerLocation(
+        ip='unknown',
+        city='Unknown',
+        country='Unknown',
+        country_code='XX',
+        region='Unknown',
+        lat=0.0,
+        lng=0.0,
+        isp='Unknown',
+        timezone='UTC',
+    )
+
+
+@router.get("/server-location", response_model=ServerLocation)
+async def get_server_geolocation(
+    auth: AuthContext = Depends(get_current_auth),
+):
+    """
+    Get the server's actual geolocation based on its public IP address.
+    
+    This endpoint detects the server's real location and returns:
+    - IP address
+    - City and country
+    - Geographic coordinates (lat/lng)
+    - ISP information
+    - Timezone
+    
+    The location is cached for 1 hour to avoid excessive API calls.
+    """
+    return get_server_location()

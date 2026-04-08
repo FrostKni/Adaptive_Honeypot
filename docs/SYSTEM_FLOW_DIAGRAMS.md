@@ -129,7 +129,7 @@ Event Queue Processing
         ▼                                               ▼
 ┌───────────────┐                             ┌───────────────┐
 │  Local LLM    │                             │  Fallback     │
-│  (DeepSeek)   │                             │  (OpenAI)     │
+│  (GLM5)   │                             │  (OpenAI)     │
 └───────┬───────┘                             └───────┬───────┘
         │                                               │
         │◀────────── Try First ─────────────────────────│

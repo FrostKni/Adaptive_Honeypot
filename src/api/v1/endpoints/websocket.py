@@ -42,15 +42,19 @@ class ConnectionManager:
         self.subscriptions[websocket] = channels
 
     async def broadcast(self, message: dict, channel: str = None):
-        """Broadcast message to all connections or specific channel."""
+        """Broadcast message to all connections or specific channel.
+        
+        Clients with no subscriptions receive all messages (subscribe-all default).
+        Clients with subscriptions only receive messages for their channels.
+        """
         disconnected = []
 
         for connection in self.active_connections:
             try:
-                # Check channel subscription
-                if channel and channel not in self.subscriptions.get(connection, []):
+                subs = self.subscriptions.get(connection, [])
+                # Skip only if client has explicit subscriptions that don't include this channel
+                if channel and subs and channel not in subs:
                     continue
-
                 await connection.send_json(message)
             except Exception:
                 disconnected.append(connection)

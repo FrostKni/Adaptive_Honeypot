@@ -50,7 +50,7 @@ Based on research findings, the optimal strategy combines:
          v (fallback)
 +------------------+     +-----------------+     +------------------+
 |   Edge Case      | --> | Cloud LLM API   | --> | Complex Response |
-|   (ambiguous)    |     | (DeepSeek/etc)  |     | (3-10 seconds)   |
+|   (ambiguous)    |     | (GLM5/etc)  |     | (3-10 seconds)   |
 +------------------+     +-----------------+     +------------------+
 ```
 

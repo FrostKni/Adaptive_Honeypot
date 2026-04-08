@@ -137,6 +137,28 @@ class CognitiveProfileRepository:
             logger.error(f"Error getting cognitive profile: {e}")
             return None
     
+    async def get_recent_profiles(self, limit: int = 50) -> List[CognitiveProfileDB]:
+        """
+        Get recent cognitive profiles across all sessions.
+        
+        Args:
+            limit: Maximum number of profiles to return
+            
+        Returns:
+            List of CognitiveProfileDB instances, most recent first
+        """
+        try:
+            # Get the latest profile for each session
+            stmt = select(CognitiveProfileDB).order_by(
+                CognitiveProfileDB.updated_at.desc()
+            ).limit(limit)
+            
+            result = await self.session.execute(stmt)
+            return list(result.scalars().all())
+        except Exception as e:
+            logger.error(f"Error getting recent profiles: {e}")
+            return []
+    
     async def store_deception_event(
         self,
         session_id: str,

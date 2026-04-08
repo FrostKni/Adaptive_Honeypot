@@ -298,3 +298,89 @@ class APIKeyRepository(BaseRepository):
                 total_requests=self.model.total_requests + 1
             )
         )
+
+
+class AIDecisionRepository(BaseRepository):
+    """Repository for AIDecisionDB model."""
+    
+    def __init__(self, session: AsyncSession):
+        from src.core.db.models import AIDecisionDB
+        super().__init__(AIDecisionDB, session)
+    
+    async def get_recent_decisions(
+        self,
+        limit: int = 10,
+        source_ip: Optional[str] = None,
+        threat_level: Optional[str] = None,
+    ) -> List[Any]:
+        """Get recent AI decisions with optional filters."""
+        from src.core.db.models import AIDecisionDB
+        
+        query = select(AIDecisionDB).order_by(AIDecisionDB.created_at.desc())
+        
+        if source_ip:
+            query = query.where(AIDecisionDB.source_ip == source_ip)
+        if threat_level:
+            query = query.where(AIDecisionDB.threat_level == threat_level)
+        
+        query = query.limit(limit)
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+    
+    async def mark_executed(
+        self,
+        decision_id: str,
+        success: bool,
+        error: Optional[str] = None
+    ):
+        """Mark a decision as executed."""
+        from datetime import datetime
+        await self.session.execute(
+            update(self.model)
+            .where(self.model.id == decision_id)
+            .values(
+                executed=True,
+                executed_at=datetime.utcnow(),
+                execution_success=success,
+                execution_error=error
+            )
+        )
+    
+    async def get_stats(self) -> Dict[str, Any]:
+        """Get decision statistics."""
+        from src.core.db.models import AIDecisionDB
+        
+        # Total decisions
+        total_result = await self.session.execute(
+            select(func.count()).select_from(AIDecisionDB)
+        )
+        total = total_result.scalar() or 0
+        
+        # By threat level
+        threat_result = await self.session.execute(
+            select(AIDecisionDB.threat_level, func.count())
+            .group_by(AIDecisionDB.threat_level)
+        )
+        by_threat = dict(threat_result.all())
+        
+        # By action
+        action_result = await self.session.execute(
+            select(AIDecisionDB.action, func.count())
+            .group_by(AIDecisionDB.action)
+        )
+        by_action = dict(action_result.all())
+        
+        # Executed count
+        executed_result = await self.session.execute(
+            select(func.count()).select_from(AIDecisionDB)
+            .where(AIDecisionDB.executed == True)
+        )
+        executed = executed_result.scalar() or 0
+        
+        return {
+            "total": total,
+            "by_threat_level": by_threat,
+            "by_action": by_action,
+            "executed": executed,
+            "pending_execution": total - executed,
+        }

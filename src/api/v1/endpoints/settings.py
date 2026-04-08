@@ -63,7 +63,7 @@ class AIConfigSettings(BaseModel):
         enabled=True,
         apiKey="***",
         baseUrl="https://api.ai.oac/v1",
-        model="DeepSeek"
+        model="GLM5"
     )
     
     openai: AIProviderConfig = AIProviderConfig(

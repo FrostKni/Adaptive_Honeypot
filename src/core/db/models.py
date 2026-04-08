@@ -516,3 +516,120 @@ class DeceptionEventDB(Base):
         Index("ix_deception_events_bias_type", "bias_type"),
         Index("ix_deception_events_created_at", "created_at"),
     )
+
+
+class AIDecisionDB(Base):
+    """AI Decision record for persistent storage of AI analysis decisions."""
+    __tablename__ = "ai_decisions"
+    
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    
+    # Source info
+    source_ip: Mapped[str] = mapped_column(String(45), nullable=False)
+    honeypot_id: Mapped[Optional[str]] = mapped_column(String(100))
+    session_id: Mapped[Optional[str]] = mapped_column(String(100))
+    
+    # Threat assessment
+    threat_level: Mapped[str] = mapped_column(String(20), nullable=False)  # low, medium, high, critical
+    threat_score: Mapped[float] = mapped_column(Float, default=0.0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    # Decision details
+    action: Mapped[str] = mapped_column(String(50), nullable=False)  # monitor, reconfigure, switch_container, isolate
+    reasoning: Mapped[Optional[str]] = mapped_column(Text)
+    configuration_changes: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    
+    # MITRE ATT&CK mapping
+    mitre_attack_ids: Mapped[List[str]] = mapped_column(JSON, default=list)
+    
+    # Analysis metadata
+    attacker_skill: Mapped[Optional[str]] = mapped_column(String(50))
+    attack_objectives: Mapped[List[str]] = mapped_column(JSON, default=list)
+    
+    # Execution status
+    executed: Mapped[bool] = mapped_column(Boolean, default=False)
+    executed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    execution_success: Mapped[Optional[bool]] = mapped_column(Boolean)
+    execution_error: Mapped[Optional[str]] = mapped_column(Text)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index("ix_ai_decisions_source_ip", "source_ip"),
+        Index("ix_ai_decisions_threat_level", "threat_level"),
+        Index("ix_ai_decisions_action", "action"),
+        Index("ix_ai_decisions_created_at", "created_at"),
+    )
+
+
+class AIActivityDB(Base):
+    """AI Activity record for tracking AI monitoring activities."""
+    __tablename__ = "ai_activities"
+    
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    
+    # Activity details
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, running, completed, failed
+    
+    # Timing
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer)
+    
+    # Results
+    success: Mapped[bool] = mapped_column(Boolean, default=False)
+    details: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    
+    # Related entities
+    decision_id: Mapped[Optional[str]] = mapped_column(String(100))
+    honeypot_id: Mapped[Optional[str]] = mapped_column(String(100))
+    source_ip: Mapped[Optional[str]] = mapped_column(String(45))
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    
+    __table_args__ = (
+        Index("ix_ai_activities_status", "status"),
+        Index("ix_ai_activities_action", "action"),
+        Index("ix_ai_activities_created_at", "created_at"),
+    )
+
+
+class ExecutionHistoryDB(Base):
+    """Execution history for AI decision implementations."""
+    __tablename__ = "execution_history"
+    
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    decision_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    # Action details
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    honeypot_id: Mapped[Optional[str]] = mapped_column(String(100))
+    source_ip: Mapped[Optional[str]] = mapped_column(String(45))
+    
+    # Execution status
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, running, success, failed
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer)
+    
+    # Results
+    success: Mapped[Optional[bool]] = mapped_column(Boolean)
+    error: Mapped[Optional[str]] = mapped_column(Text)
+    details: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    
+    # Configuration changes applied
+    config_changes: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+    
+    # Container info
+    container_id: Mapped[Optional[str]] = mapped_column(String(100))
+    container_name: Mapped[Optional[str]] = mapped_column(String(100))
+    
+    __table_args__ = (
+        Index("ix_execution_history_decision_id", "decision_id"),
+        Index("ix_execution_history_status", "status"),
+        Index("ix_execution_history_started_at", "started_at"),
+    )

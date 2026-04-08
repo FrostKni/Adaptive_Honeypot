@@ -67,7 +67,7 @@ src/
 
 ### 2. AI Providers
 - **Primary:** OpenAI, Anthropic, Gemini
-- **Fallback:** Local DeepSeek (api.ai.oac)
+- **Fallback:** Local GLM5 (api.ai.oac)
 - **Guaranteed:** Rule-based analyzer
 
 ### 3. Decision Actions

@@ -156,7 +156,7 @@ Google Gemini Pro:
 - Use Cases: Quick classifications, high-volume processing
 - Limitations: Smaller context window
 
-Local DeepSeek:
+Local GLM5:
 - Strengths: No latency from API calls, privacy, no cost per query
 - Use Cases: High-volume processing, sensitive data scenarios
 - Limitations: Requires local infrastructure, potentially lower capability

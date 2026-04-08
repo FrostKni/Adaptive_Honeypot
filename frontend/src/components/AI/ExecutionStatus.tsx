@@ -157,12 +157,18 @@ export default function ExecutionStatus({ className = '' }: ExecutionStatusProps
     }
   }, [])
 
+  // Check if there are any active executions that need polling
+  const hasActiveExecutions = executions.some(e => e.status === 'pending' || e.status === 'running')
+
   useEffect(() => {
     fetchExecutions()
-    // Poll for updates every 5 seconds
-    const interval = setInterval(fetchExecutions, 5000)
-    return () => clearInterval(interval)
-  }, [fetchExecutions])
+    // Only poll for updates if there are active executions (pending or running)
+    // Otherwise, WebSocket will handle real-time updates for new executions
+    if (hasActiveExecutions) {
+      const interval = setInterval(fetchExecutions, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [fetchExecutions, hasActiveExecutions])
 
   const handleRefresh = () => {
     setIsRefreshing(true)

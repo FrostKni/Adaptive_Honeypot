@@ -129,7 +129,8 @@ export function useHoneypots() {
   return useQuery<Honeypot[]>({
     queryKey: queryKeys.honeypots,
     queryFn: () => apiRequest<Honeypot[]>('/honeypots'),
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    // Removed aggressive auto-refresh - use WebSocket for real-time updates instead
+    // Manual refresh via UI button or invalidate on WebSocket events
   })
 }
 
@@ -226,7 +227,8 @@ export function useDashboardStats() {
   return useQuery<DashboardStats>({
     queryKey: queryKeys.dashboardStats,
     queryFn: () => apiRequest<DashboardStats>('/analytics/dashboard'),
-    refetchInterval: 10000, // Refresh every 10 seconds
+    // Reduced from 10s to 30s - WebSocket provides real-time updates
+    refetchInterval: 30000,
   })
 }
 
@@ -315,7 +317,8 @@ export function useSystemStatus() {
   return useQuery<SystemStatus>({
     queryKey: ['systemStatus'],
     queryFn: () => apiRequest<SystemStatus>('/settings/status'),
-    refetchInterval: 5000, // Refresh every 5 seconds
+    // Reduced from 5s to 30s - system status doesn't change frequently
+    refetchInterval: 30000,
   })
 }
 
