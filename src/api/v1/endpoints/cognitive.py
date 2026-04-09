@@ -31,7 +31,10 @@ _engine: Optional[CognitiveDeceptionEngine] = None
 def get_engine() -> CognitiveDeceptionEngine:
     """Get the shared CognitiveDeceptionEngine from the global bridge."""
     from src.collectors.cognitive_bridge import get_cognitive_bridge
-    return get_cognitive_bridge().engine
+    bridge = get_cognitive_bridge()
+    if bridge is None:
+        raise HTTPException(status_code=503, detail="Cognitive engine not available")
+    return bridge.engine
 
 
 # === Request/Response Models ===
@@ -789,6 +792,49 @@ async def list_cognitive_sessions(
             profiles = await repo.get_recent_profiles(limit=limit)
             
             for profile in profiles:
+                # Get deception events for this session to build by_strategy and commands
+                deception_events = await repo.get_deception_events(profile.session_id, limit=100)
+                
+                # Build by_strategy stats
+                by_strategy = {}
+                commands_list = []
+                for event in deception_events:
+                    # Build by_strategy
+                    if event.strategy_name not in by_strategy:
+                        by_strategy[event.strategy_name] = {
+                            "applied": 0,
+                            "successful": 0
+                        }
+                    by_strategy[event.strategy_name]["applied"] += 1
+                    if event.attacker_reacted:
+                        by_strategy[event.strategy_name]["successful"] += 1
+                    
+                    # Build commands list
+                    commands_list.append({
+                        "command": event.trigger_command,
+                        "timestamp": event.created_at.isoformat() if event.created_at else "",
+                        "deception_strategy": event.strategy_name,
+                        "response_indicators": [event.response_type] if event.response_type else [],
+                        "suspicion_change": 0,
+                    })
+                
+                # Calculate success rates for by_strategy
+                for strategy in by_strategy:
+                    applied = by_strategy[strategy]["applied"]
+                    successful = by_strategy[strategy]["successful"]
+                    by_strategy[strategy]["rate"] = successful / applied if applied > 0 else 0
+                
+                # Parse beliefs to ensure they have confidence values
+                beliefs = profile.beliefs or {}
+                formatted_beliefs = {}
+                for key, value in beliefs.items():
+                    if isinstance(value, dict) and "confidence" in value:
+                        formatted_beliefs[key] = value
+                    elif isinstance(value, (int, float)):
+                        formatted_beliefs[key] = {"confidence": float(value)}
+                    else:
+                        formatted_beliefs[key] = {"confidence": 0.5}
+                
                 session_data = {
                     "session_id": profile.session_id,
                     "source_ip": profile.source_ip or "",
@@ -796,7 +842,7 @@ async def list_cognitive_sessions(
                     "last_activity": profile.updated_at.isoformat() if profile.updated_at else "",
                     "biases": profile.detected_biases or [],
                     "mental_model": {
-                        "beliefs": profile.beliefs or {},
+                        "beliefs": formatted_beliefs,
                         "knowledge": profile.knowledge or [],
                         "goals": profile.goals or [],
                         "expectations": profile.expectations or {},
@@ -814,9 +860,9 @@ async def list_cognitive_sessions(
                         "successful": profile.successful_deceptions or 0,
                         "success_rate": profile.deception_success_rate or 0,
                         "suspicion_level": profile.suspicion_level or 0,
-                        "by_strategy": {},
+                        "by_strategy": by_strategy,
                     },
-                    "commands": [],
+                    "commands": commands_list,
                     "active": not profile.is_final if profile.is_final is not None else True,
                 }
                 

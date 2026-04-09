@@ -735,7 +735,13 @@ class DecisionExecutor:
         
         total = len(history)
         if total == 0:
-            return {"total": 0}
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "success_rate": 0,
+                "actions": {}
+            }
         
         success_count = sum(1 for r in history if r.status == ExecutionStatus.SUCCESS)
         failed_count = sum(1 for r in history if r.status == ExecutionStatus.FAILED)
@@ -767,7 +773,13 @@ class DecisionExecutor:
                 total = total_result.scalar() or 0
                 
                 if total == 0:
-                    return {"total": 0}
+                    return {
+                        "total": 0,
+                        "success": 0,
+                        "failed": 0,
+                        "success_rate": 0,
+                        "actions": {}
+                    }
                 
                 # Success count
                 success_result = await session.execute(
@@ -799,7 +811,13 @@ class DecisionExecutor:
                 }
         except Exception as e:
             logger.error(f"Error loading stats from DB: {e}")
-            return {"total": 0}
+            return {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "success_rate": 0,
+                "actions": {}
+            }
 
 
 # Singleton instance

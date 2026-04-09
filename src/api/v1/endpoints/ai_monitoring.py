@@ -311,7 +311,11 @@ async def get_ai_metrics(current_user = Depends(get_current_user)):
             )
             successful = successful_result.scalar() or 0
             
-            failed = total_activities - successful
+            failed_result = await session.execute(
+                select(func.count()).select_from(AIActivityDB)
+                .where(AIActivityDB.success == False)
+            )
+            failed = failed_result.scalar() or 0
             
             # Status distribution
             status_result = await session.execute(
@@ -333,21 +337,25 @@ async def get_ai_metrics(current_user = Depends(get_current_user)):
             )
             action_counts = dict(action_result.all())
             
-            # Average threat score
+            # Average threat score - only from decisions table
             avg_result = await session.execute(
                 select(func.avg(AIDecisionDB.threat_score))
             )
             avg_threat = avg_result.scalar() or 0
             
+            # Calculate success rate based on completed activities (success or failed)
+            completed_activities = successful + failed
+            success_rate = successful / completed_activities if completed_activities > 0 else 0
+            
             return {
                 "total_activities": total_activities,
                 "successful_activities": successful,
                 "failed_activities": failed,
-                "success_rate": successful / total_activities if total_activities > 0 else 0,
+                "success_rate": round(success_rate, 3),
                 "status_distribution": status_counts,
                 "total_decisions": total_decisions,
                 "action_distribution": action_counts,
-                "average_threat_score": round(float(avg_threat), 3),
+                "average_threat_score": round(float(avg_threat), 3) if total_decisions > 0 else 0,
                 "pending_events": len(ai_service.pending_events),
                 "active_sessions": len(ai_service.active_sessions)
             }
@@ -419,7 +427,16 @@ async def get_executions(
     from src.ai.decision_executor import get_executor
     executor = get_executor()
     if executor is None or executor.client is None:
-        return {"executions": [], "stats": {"total": 0}}
+        return {
+            "executions": [],
+            "stats": {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "success_rate": 0,
+                "actions": {}
+            }
+        }
     return {
         "executions": executor.get_execution_history(limit),
         "stats": executor.get_stats()
@@ -432,7 +449,13 @@ async def get_execution_stats(current_user = Depends(get_current_user)):
     from src.ai.decision_executor import get_executor
     executor = get_executor()
     if executor is None or executor.client is None:
-        return {"total": 0}
+        return {
+            "total": 0,
+            "success": 0,
+            "failed": 0,
+            "success_rate": 0,
+            "actions": {}
+        }
     return executor.get_stats()
 
 

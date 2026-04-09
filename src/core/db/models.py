@@ -440,6 +440,9 @@ class CognitiveProfileDB(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(String(100), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
     
+    # Source IP for quick access (also in sessions table)
+    source_ip: Mapped[Optional[str]] = mapped_column(String(45), index=True)
+    
     # Detected biases (JSON array of bias objects)
     detected_biases: Mapped[List[Dict]] = mapped_column(JSON, default=list)
     

@@ -111,6 +111,20 @@ class AIMonitoringService:
         self.active_sessions: Dict[str, Dict] = {}
         self.subscribers: List = []
         self.decision_subscribers: List = []  # Subscribers for decision updates
+        
+        # Initialize cognitive bridge for real-time cognitive profiling
+        self._cognitive_bridge = None
+        self._init_cognitive_bridge()
+    
+    def _init_cognitive_bridge(self):
+        """Initialize the cognitive integration bridge using the global singleton."""
+        try:
+            from src.collectors.cognitive_bridge import get_cognitive_bridge
+            self._cognitive_bridge = get_cognitive_bridge()
+            logger.info("Cognitive bridge initialized for AI monitoring (using global singleton)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize cognitive bridge: {e}")
+            self._cognitive_bridge = None
 
     async def start(self):
         """Start the AI monitoring service."""
@@ -337,6 +351,9 @@ class AIMonitoringService:
 
             # Execute decision
             await self._execute_decision(decision, event)
+            
+            # Process through cognitive bridge for real-time cognitive profiling
+            await self._process_cognitive_analysis(event, decision, analysis)
 
         except Exception as e:
             logger.error(f"Event analysis failed: {e}")
@@ -579,6 +596,77 @@ class AIMonitoringService:
                 logger.info(f"Saved decision {decision.id} to database")
         except Exception as e:
             logger.error(f"Failed to save decision to database: {e}")
+    
+    async def _process_cognitive_analysis(self, event: AttackEvent, decision: AIDecision, analysis: Dict):
+        """
+        Process attack event through cognitive bridge for real-time cognitive profiling.
+        This creates cognitive profiles that appear in the Cognitive Dashboard.
+        """
+        if not self._cognitive_bridge:
+            logger.debug("Cognitive bridge not available, skipping cognitive analysis")
+            return
+        
+        try:
+            # Use session_id from event or create one from source_ip
+            session_id = event.session_id or f"session-{event.source_ip}-{int(event.timestamp.timestamp())}"
+            
+            # Process each command through cognitive bridge
+            if event.commands:
+                for command in event.commands:
+                    try:
+                        result = await self._cognitive_bridge.process_command(
+                            session_id=session_id,
+                            command=command,
+                            source_ip=event.source_ip,
+                            session_data={
+                                "honeypot_id": event.honeypot_id,
+                                "attack_type": event.attack_type,
+                                "threat_level": decision.threat_level.value,
+                                "threat_score": decision.threat_score,
+                                "attacker_skill": analysis.get("attacker_skill"),
+                                "attack_objectives": analysis.get("attack_objectives", []),
+                            }
+                        )
+                        logger.info(f"Cognitive analysis completed for session {session_id}: {len(result.biases_detected)} biases detected")
+                    except Exception as e:
+                        logger.warning(f"Failed to process command through cognitive bridge: {e}")
+            else:
+                # Process the raw log as a single command for cognitive profiling
+                if event.raw_log:
+                    try:
+                        result = await self._cognitive_bridge.process_command(
+                            session_id=session_id,
+                            command=event.raw_log[:500],  # Limit length
+                            source_ip=event.source_ip,
+                            session_data={
+                                "honeypot_id": event.honeypot_id,
+                                "attack_type": event.attack_type,
+                                "threat_level": decision.threat_level.value,
+                                "threat_score": decision.threat_score,
+                                "attacker_skill": analysis.get("attacker_skill"),
+                                "attack_objectives": analysis.get("attack_objectives", []),
+                            }
+                        )
+                        logger.info(f"Cognitive analysis completed for session {session_id}: {len(result.biases_detected)} biases detected")
+                    except Exception as e:
+                        logger.warning(f"Failed to process raw log through cognitive bridge: {e}")
+            
+            # Update active sessions for tracking
+            if session_id not in self.active_sessions:
+                self.active_sessions[session_id] = {
+                    "source_ip": event.source_ip,
+                    "honeypot_id": event.honeypot_id,
+                    "first_seen": event.timestamp.isoformat(),
+                    "last_activity": datetime.utcnow().isoformat(),
+                    "threat_score": decision.threat_score,
+                    "threat_level": decision.threat_level.value,
+                }
+            else:
+                self.active_sessions[session_id]["last_activity"] = datetime.utcnow().isoformat()
+                self.active_sessions[session_id]["threat_score"] = decision.threat_score
+                
+        except Exception as e:
+            logger.error(f"Cognitive analysis failed: {e}")
 
 
 # Global AI monitoring service instance

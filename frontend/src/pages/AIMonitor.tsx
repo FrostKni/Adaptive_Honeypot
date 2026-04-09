@@ -745,13 +745,13 @@ export default function AIMonitor() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <MetricItem
               label="Success Rate"
-              value={`${(metrics.success_rate * 100).toFixed(1)}%`}
+              value={metrics.total_activities > 0 ? `${(metrics.success_rate * 100).toFixed(1)}%` : 'N/A'}
               icon={TrendingUp}
               color={THEME.accentSuccess}
             />
             <MetricItem
               label="Avg Threat Score"
-              value={metrics.average_threat_score.toFixed(3)}
+              value={metrics.total_decisions > 0 ? metrics.average_threat_score.toFixed(3) : 'N/A'}
               icon={AlertTriangle}
               color={THEME.accentWarning}
             />
@@ -763,7 +763,7 @@ export default function AIMonitor() {
             />
             <MetricItem
               label="Success/Fail"
-              value={`${metrics.successful_activities}/${metrics.failed_activities}`}
+              value={metrics.total_activities > 0 ? `${metrics.successful_activities}/${metrics.failed_activities}` : '0/0'}
               icon={CheckCircle}
               color={THEME.accentSuccess}
             />

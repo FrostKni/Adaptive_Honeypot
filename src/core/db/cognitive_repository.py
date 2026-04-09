@@ -40,6 +40,7 @@ class CognitiveProfileRepository:
         self,
         session_id: str,
         profile: CognitiveProfile,
+        source_ip: str = "",
         is_final: bool = False,
     ) -> Optional[CognitiveProfileDB]:
         """
@@ -48,6 +49,7 @@ class CognitiveProfileRepository:
         Args:
             session_id: Session identifier
             profile: CognitiveProfile to store
+            source_ip: Source IP of the attacker
             is_final: Whether this is the final profile for the session
             
         Returns:
@@ -78,6 +80,8 @@ class CognitiveProfileRepository:
                 existing.signals = profile.signals
                 existing.updated_at = datetime.utcnow()
                 existing.is_final = is_final
+                if source_ip:
+                    existing.source_ip = source_ip
                 
                 await self.session.commit()
                 logger.debug(f"Updated cognitive profile for session {session_id}")
@@ -86,6 +90,7 @@ class CognitiveProfileRepository:
                 # Create new profile
                 new_profile = CognitiveProfileDB(
                     session_id=session_id,
+                    source_ip=source_ip or None,
                     detected_biases=[b.to_dict() for b in profile.detected_biases],
                     beliefs=profile.mental_model.beliefs,
                     knowledge=profile.mental_model.knowledge,

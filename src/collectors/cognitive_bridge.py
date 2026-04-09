@@ -308,6 +308,7 @@ class CognitiveIntegrationBridge:
                     await repo.store_profile(
                         session_id=session_id,
                         profile=profile,
+                        source_ip=source_ip,
                         is_final=is_final,
                     )
 
